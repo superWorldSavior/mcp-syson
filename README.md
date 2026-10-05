@@ -1,6 +1,6 @@
 # @casys/mcp-syson
 
-[![Publish](https://github.com/Casys-AI/mcp-syson/actions/workflows/publish.yml/badge.svg)](https://github.com/Casys-AI/mcp-syson/actions/workflows/publish.yml)
+[![Publish](https://github.com/superWorldSavior/mcp-syson/actions/workflows/publish.yml/badge.svg)](https://github.com/superWorldSavior/mcp-syson/actions/workflows/publish.yml)
 [![JSR](https://jsr.io/badges/@casys/mcp-syson)](https://jsr.io/@casys/mcp-syson)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
