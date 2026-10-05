@@ -17,7 +17,7 @@ const SYSON_DIGEST = `sha256:${"b".repeat(64)}`;
 const DATABASE_DIGEST = `sha256:${"c".repeat(64)}`;
 const REVISION = "d".repeat(40);
 
-function options(): QualificationOptions {
+function options(expectedSource?: string): QualificationOptions {
   return parseQualificationOptions([
     "--http-url",
     "http://127.0.0.1:3009/mcp",
@@ -47,6 +47,9 @@ function options(): QualificationOptions {
     REVISION,
     "--runtime-contract",
     "/tmp/release-runtime-contract.json",
+    ...(expectedSource === undefined
+      ? []
+      : ["--expected-source", expectedSource]),
   ]);
 }
 
@@ -285,6 +288,49 @@ Deno.test("runtime qualification rejects GraphQL errors even when data is presen
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+Deno.test("personal qualification requires its explicitly selected OCI source", async () => {
+  const personalSource = "https://github.com/superWorldSavior/mcp-syson";
+  const selected = options(personalSource);
+  selected.mcpImage = `ghcr.io/superworldsavior/mcp-syson@${MCP_DIGEST}`;
+  const observed = runtime();
+  observed.mcpLabels.source = personalSource;
+  const contract = await releasedTransportContract();
+  contract.image = selected.mcpImage;
+  const result = await qualifyRuntime(
+    new FixtureMcpClient(),
+    selected,
+    observed,
+    contract,
+  );
+  assertEquals(selected.expectedSource, personalSource);
+  assertEquals(
+    (result.runtime as { mcpSyson: { labels: { source: string } } }).mcpSyson
+      .labels.source,
+    personalSource,
+  );
+  await assertRejects(
+    () => qualifyRuntime(new FixtureMcpClient(), selected, runtime(), contract),
+    Error,
+    "mcp-syson OCI source label drifted",
+  );
+});
+
+Deno.test("qualification preserves strict historical source and rejects unrelated coordinates", async () => {
+  const observed = runtime();
+  observed.mcpLabels.source = "https://github.com/superWorldSavior/mcp-syson";
+  const contract = await releasedTransportContract();
+  await assertRejects(
+    () => qualifyRuntime(new FixtureMcpClient(), options(), observed, contract),
+    Error,
+    "mcp-syson OCI source label drifted",
+  );
+  assertThrows(
+    () => options("https://github.com/another-owner/mcp-syson"),
+    Error,
+    "--expected-source",
+  );
 });
 
 function runtime(): QualificationRuntime {

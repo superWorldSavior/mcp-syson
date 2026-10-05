@@ -37,6 +37,7 @@ export interface QualificationOptions {
   databaseImageDigest: string;
   packageVersion: string;
   sourceRevision: string;
+  expectedSource?: string;
   runtimeContract: string;
   output?: string;
 }
@@ -149,6 +150,7 @@ export function parseQualificationOptions(
     "--database-image-digest",
     "--version",
     "--revision",
+    "--expected-source",
     "--runtime-contract",
     "--output",
   ]);
@@ -170,6 +172,7 @@ export function parseQualificationOptions(
     databaseImageDigest: required("--database-image-digest"),
     packageVersion: required("--version"),
     sourceRevision: required("--revision"),
+    expectedSource: values.get("--expected-source"),
     runtimeContract: required("--runtime-contract"),
     output: values.get("--output"),
   };
@@ -206,6 +209,16 @@ export function validateQualificationOptions(
   }
   if (!GIT_REVISION.test(options.sourceRevision)) {
     throw new Error("--revision must be a full lowercase 40-character Git SHA");
+  }
+  if (
+    options.expectedSource !== undefined &&
+    !/^https:\/\/github\.com\/(?:Casys-AI|superWorldSavior)\/mcp-syson$/.test(
+      options.expectedSource,
+    )
+  ) {
+    throw new Error(
+      "--expected-source must name the historical or personal mcp-syson repository",
+    );
   }
   if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(options.packageVersion)) {
     throw new Error("--version must be a package semantic version");
@@ -924,7 +937,7 @@ function assertMcpRuntimeLabels(
 ): void {
   assertEqual(
     labels.source,
-    "https://github.com/Casys-AI/mcp-syson",
+    options.expectedSource ?? "https://github.com/Casys-AI/mcp-syson",
     "mcp-syson OCI source label",
   );
   assertEqual(

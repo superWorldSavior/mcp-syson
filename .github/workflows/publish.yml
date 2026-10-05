@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  REGISTRY_IMAGE: ghcr.io/superworldsavior/mcp-syson
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -127,10 +130,9 @@ jobs:
       - name: Define immutable image coordinates
         id: image
         env:
-          OWNER: ${{ github.repository_owner }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          IMAGE="ghcr.io/${OWNER,,}/mcp-syson"
+          IMAGE="$REGISTRY_IMAGE"
           printf 'name=%s\n' "$IMAGE" >> "$GITHUB_OUTPUT"
           printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
           printf 'created=%s\n' "$(date --utc +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
@@ -207,6 +209,7 @@ jobs:
           VERSION: ${{ steps.image.outputs.version }}
           REVISION: ${{ github.sha }}
           QUALIFICATION_MCP_PORT: "3010"
+          RELEASE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
           QUALIFICATION_SYSON_PORT: "3011"
           QUALIFICATION_POSTGRES_IMAGE: postgres@sha256:c9d304da25223a60a3b3c5ec77b599c59f4a6088950ee612fdb5115d713d100d
           QUALIFICATION_SYSON_IMAGE: eclipsesyson/syson@sha256:c1f457ed236757f717ea1c9f79f0c950be8d79db89f3f265a81a7310200bb690
@@ -257,6 +260,7 @@ jobs:
             --database-image-digest sha256:c9d304da25223a60a3b3c5ec77b599c59f4a6088950ee612fdb5115d713d100d \
             --version "$VERSION" \
             --revision "$REVISION" \
+            --expected-source "$RELEASE_SOURCE" \
             --runtime-contract "$RUNNER_TEMP/release-runtime-contract.json" \
             --output "$RUNNER_TEMP/release-runtime-qualification.json"
 

@@ -9,7 +9,7 @@ ARG TARGETARCH
 
 LABEL org.opencontainers.image.title="Casys SysON MCP provider" \
   org.opencontainers.image.description="MCP provider for SysON and SysML v2" \
-  org.opencontainers.image.source="https://github.com/Casys-AI/mcp-syson" \
+  org.opencontainers.image.source="https://github.com/superWorldSavior/mcp-syson" \
   org.opencontainers.image.revision="${REVISION}" \
   org.opencontainers.image.version="${VERSION}" \
   org.opencontainers.image.created="${CREATED}" \
