@@ -4,12 +4,13 @@ import { defineComponentRegistry } from "@casys/mcp-view-components";
 import {
   Badge,
   CollectionCard,
+  DataTable,
   Disclosure,
   ElementIdent,
   ElementLimit,
-  ElementProvenance,
   EmptyState,
   SemanticElement,
+  StateMessage,
 } from "@casys/mcp-view-components/preact/components";
 import {
   defaultComponentSurface,
@@ -32,6 +33,9 @@ import {
   isRequirementsCaptureReadModel,
   type RequirementsCaptureReadModel,
 } from "../../shared/recorded-content";
+import { SelectionBasket } from "../../shared/SelectionBasket";
+import { useSysonSelection } from "../../shared/selection-hooks";
+import { createSelectionGesture } from "../../shared/selection-gesture";
 import "../../global.css";
 
 function operatorGlyph(operator: string): string {
@@ -52,61 +56,128 @@ function AuthoredList(
 ) {
   const t = sysonMessages(context.hostContext.locale);
   const digest = recordedProjectionDigest(context);
+  const { controller, snapshot } = useSysonSelection(context, data.rootId);
   return (
-    <CollectionCard
-      label={t("authoredRequirements")}
-      eyebrow={t("authoredRequirements")}
-      title={data.target.label || data.target.id}
-      actions={
-        <Badge>
-          {t(data.count === 1 ? "limitCountOne" : "limitCountMany", {
-            count: data.count,
-          })}
-        </Badge>
-      }
-      scrollable
-    >
-      {data.requirements.length
-        ? (
-          <>
-            {data.requirements.map((requirement) => (
-              <SemanticElement
-                key={requirement.id}
-                reference={sysmlRef("Requirement", requirement.id, digest)}
-                density="row"
-                ident={
-                  <ElementIdent
-                    label={requirement.name}
-                    detail={requirement.metric}
-                  />
-                }
-                reading={
-                  <ElementLimit
-                    label={t("authoredLimit")}
-                    operator={operatorGlyph(requirement.operator)}
-                    value={formatHostNumber(
-                      requirement.limit.value,
-                      context.hostContext.locale,
-                      { maximumSignificantDigits: 21 },
-                    )}
-                    unit={requirement.limit.unit}
-                  />
-                }
-              />
-            ))}
-            <Disclosure label={t("rowIdentities")}>
-              {data.requirements.map((requirement) => (
-                <ElementProvenance
-                  key={requirement.id}
-                  label={requirement.name}
-                  value={requirement.id}
+    <>
+      <CollectionCard
+        label={t("authoredRequirements")}
+        eyebrow={t("authoredRequirements")}
+        title={data.target.label || data.target.id}
+        actions={
+          <Badge>
+            {t(data.count === 1 ? "limitCountOne" : "limitCountMany", {
+              count: data.count,
+            })}
+          </Badge>
+        }
+        scrollable
+      >
+        {snapshot.error && (
+          <StateMessage tone="danger" title="error">
+            {snapshot.error}
+          </StateMessage>
+        )}
+        {data.requirements.length
+          ? (
+            <>
+              {data.requirements.map((requirement) => {
+                const item = {
+                  reference: sysmlRef("Requirement", requirement.id, digest),
+                  label: requirement.name,
+                  summary:
+                    `${requirement.metric} ${requirement.operator} ${requirement.limit.value} ${requirement.limit.unit}`,
+                };
+                const gesture = createSelectionGesture(controller, item);
+                return (
+                  <div
+                    key={requirement.id}
+                    tabIndex={0}
+                    role="group"
+                    aria-label={requirement.name}
+                    onClick={gesture.onClick}
+                    onKeyDown={(event) => {
+                      // Nested controls retain their native Space/Enter behavior.
+                      if (event.target === event.currentTarget) {
+                        gesture.onKeyDown(event);
+                      }
+                    }}
+                  >
+                    <SemanticElement
+                      key={requirement.id}
+                      reference={sysmlRef(
+                        "Requirement",
+                        requirement.id,
+                        digest,
+                      )}
+                      density="row"
+                      selected={snapshot.items.some((item) =>
+                        item.reference.id === requirement.id
+                      )}
+                      ident={
+                        <ElementIdent
+                          label={requirement.name}
+                          detail={requirement.metric}
+                        />
+                      }
+                      reading={
+                        <ElementLimit
+                          label={t("authoredLimit")}
+                          operator={operatorGlyph(requirement.operator)}
+                          value={formatHostNumber(
+                            requirement.limit.value,
+                            context.hostContext.locale,
+                            { maximumSignificantDigits: 21 },
+                          )}
+                          unit={requirement.limit.unit}
+                        />
+                      }
+                    />
+                  </div>
+                );
+              })}
+              <Disclosure label={t("rowIdentities")}>
+                <DataTable
+                  label={t("authoredRequirements")}
+                  rows={data.requirements}
+                  rowKey={(requirement) => requirement.id}
+                  columns={[
+                    {
+                      id: "name",
+                      label: t("requirements"),
+                      render: (requirement) => requirement.name,
+                    },
+                    {
+                      id: "metric",
+                      label: t("authoredLimit"),
+                      render: (requirement) =>
+                        `${requirement.metric} ${
+                          operatorGlyph(requirement.operator)
+                        } ${
+                          formatHostNumber(
+                            requirement.limit.value,
+                            context.hostContext.locale,
+                            { maximumSignificantDigits: 21 },
+                          )
+                        } ${requirement.limit.unit}`,
+                    },
+                    {
+                      id: "id",
+                      label: t("rootIdentity"),
+                      render: (requirement) => requirement.id,
+                    },
+                  ]}
                 />
-              ))}
-            </Disclosure>
-          </>
-        )
-        : <EmptyState>{t("noAuthoredRequirements")}</EmptyState>}
-    </CollectionCard>
+              </Disclosure>
+            </>
+          )
+          : <EmptyState>{t("noAuthoredRequirements")}</EmptyState>}
+      </CollectionCard>
+      <SelectionBasket
+        context={context}
+        controller={controller}
+        snapshot={snapshot}
+      />
+    </>
   );
 }
 

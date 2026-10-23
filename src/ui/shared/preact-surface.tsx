@@ -36,6 +36,7 @@ import {
   type SysonRecordedContentAdapter,
   type SysonRecordedViewSession,
 } from "./recorded-session.ts";
+import { toolResultIssue } from "./tool-result.ts";
 
 export type { SurfaceLabel };
 
@@ -137,6 +138,26 @@ export async function startSysonViewerApp<TContent extends ResultData>(
         fallback: "json-text",
         validate,
       });
+      const issue = toolResultIssue(result, content !== undefined);
+      if (issue) {
+        return {
+          kind: "error",
+          title: (locale) =>
+            sysonMessages(locale)(
+              issue.kind === "provider"
+                ? "toolErrorTitle"
+                : "invalidToolDataTitle",
+            ),
+          code: issue.code,
+          message: (locale) =>
+            issue.message ||
+            sysonMessages(locale)(
+              issue.kind === "provider"
+                ? "toolErrorTitle"
+                : "invalidToolDataMessage",
+            ),
+        };
+      }
       return content
         ? { kind: "result", result: { content } }
         : { kind: "empty" };

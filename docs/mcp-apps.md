@@ -35,6 +35,47 @@ The App registers its result and session handlers before connecting to the host.
 This prevents an early notification from being lost during the MCP Apps
 handshake.
 
+## Navigation and selection contract
+
+For a task-oriented workflow, see
+[Browse model elements and diagram views](how-to/browse-model-views.md).
+
+The model explorer uses the kit `PathBar`, `TreeList` and `DrillHint`
+components. Opening a real listed element calls `syson_element_children` on the
+originating provider. `editingContextId` is an optional addition to the children
+payload; older payloads remain displayable but cannot initiate that live read.
+The path retains earlier levels and their filters and scroll positions. Empty
+children, loading, rejected results and read failures remain explicit. Responses
+from a superseded root or abandoned level cannot replace the current branch.
+
+Model and diagram selection uses provider element identities. Click and Space
+toggle an item; double-click and Enter inspect while preserving the preceding
+selection. Inspection does not implicitly select. The basket belongs to the
+viewer root and survives local navigation and language changes. A new root
+invalidates old handlers and queues an empty context replacement. Diagram Select
+mode also adds fully enclosed semantic elements through a background selection
+rectangle; Pan mode moves the canvas.
+
+The diagram chooser separates existing representations (`syson_diagram_list`)
+from available native types for its target (`syson_diagram_types`). A type is
+availability information, not an existing or newly created view. Only existing
+diagram representations are opened through `syson_diagram_snapshot`; table or
+other representations require an appropriate viewer and show that limitation.
+Snapshot data retains representation metadata, nested nodes and layout data when
+supplied. The subscription bounds child-node recursion to depth 8. Local SVG
+rendering approximates the native diagram using the supplied topology and
+coordinates; it does not reproduce every native style or editor interaction.
+
+Live navigation requires the host's `serverTools` capability plus the relevant
+editing-context identifier. Recorded sessions make no provider calls, including
+for element inspection or view discovery. Captured identities and summaries can
+still be selected for the host's context when that host supports updates. The
+basket reports unavailable, pending and rejected updates and provides remove,
+clear and retry actions. Each update replaces the complete context for that
+viewer, including an empty replacement when cleared. Acknowledgement means
+acceptance by the host for future turns; it proves neither model consumption nor
+an AI response. Selection does not send a conversational request.
+
 ## Recorded read-only sessions
 
 A recording host can reopen an exact result without calling the live provider.
@@ -84,11 +125,11 @@ rendered from the capture. Exact row identifiers stay behind a closed kit
 `Disclosure` so they remain inspectable without flooding the default surface.
 The viewer neither derives a measurement nor assigns a satisfaction verdict.
 Satisfaction-link coverage remains in the separate requirements-trace resource,
-which does not accept authored-limit captures. Its standalone surface is the
-kit `FocusedView`: one coverage visualization, critical status outside the
-collapsed details, and root identity plus optional trace/link inspection in
-that closed disclosure. The trace-list and satisfaction-link keys stay
-independently mountable and are not nested as a dashboard.
+which does not accept authored-limit captures. Its standalone surface is the kit
+`FocusedView`: one coverage visualization, critical status outside the collapsed
+details, and root identity plus optional trace/link inspection in that closed
+disclosure. The trace-list and satisfaction-link keys stay independently
+mountable and are not nested as a dashboard.
 
 The authored-requirements viewer ships a committed fixture and a documentation
 harness for reproducible README captures.
@@ -147,9 +188,9 @@ Example negotiated context:
 }
 ```
 
-Selectable domain rows emit named semantic selection events. The events carry
-provider identities; they do not perform writes or navigate the host by
-themselves.
+Model and diagram basket selections emit named semantic selection events after
+the context update is acknowledged. The events carry provider identities; they
+do not perform model writes or navigate the host by themselves.
 
 ## Package and bundle layout
 

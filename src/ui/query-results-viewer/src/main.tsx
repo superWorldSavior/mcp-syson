@@ -225,13 +225,13 @@ function Values(
               return (
                 <SemanticElement
                   key={item.id}
-                  reference={sysmlRef(kind, item.id, digest)}
+                  reference={sysmlRef(kind || "search-result", item.id, digest)}
                   density="row"
                   selected={selected === item.id}
                   ident={
                     <ElementIdent
                       label={item.label || t("unnamed")}
-                      detail={`${kind} · ${item.id}`}
+                      detail={`${kind || t("unknown")} · ${item.id}`}
                     />
                   }
                   activationLabel={t("selectItem", {

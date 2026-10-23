@@ -10,6 +10,29 @@ export const SYSON_MESSAGES_EN = {
   loadingValue: "Waiting for value data…",
   emptyDiagram: "No diagram data received",
   sessionRejected: "Recorded {view} session rejected.",
+  toolErrorTitle: "Operation failed",
+  invalidToolDataTitle: "Result unavailable",
+  invalidToolDataMessage:
+    "The returned data does not match this viewer's expected format.",
+  modelPath: "Model path",
+  modelRoot: "Model",
+  back: "Back to parent",
+  retainedLevels: "Previous levels",
+  navigationUnavailable:
+    "Browsing is unavailable in this host or recorded result.",
+  loadingChildren: "Loading children…",
+  navigationFailed: "Could not open this element.",
+  openChildren: "Open {label}",
+  selectionPending: "Waiting for the host to accept the selection…",
+  selectionFailed: "The host did not accept the selection.",
+  authoredConstraintsOnly: "Authored constraints",
+  authoredConstraintsNotValidated:
+    "Declared expressions; measurements and validation have not been resolved.",
+  authoredConstraintsUnavailable: "Authored constraints unavailable",
+  authoredConstraintsBounded:
+    "Constraint details are loaded for the first 10 requirements.",
+  authoredConstraintsNotCaptured:
+    "This result does not contain authored constraint details.",
 
   unnamed: "(unnamed)",
   unnamedRequirement: "(unnamed requirement)",
@@ -145,6 +168,29 @@ export const SYSON_MESSAGES_FR = {
   loadingValue: "En attente des données de valeur…",
   emptyDiagram: "Aucune donnée de diagramme reçue",
   sessionRejected: "Session enregistrée {view} rejetée.",
+  toolErrorTitle: "Échec de l’opération",
+  invalidToolDataTitle: "Résultat indisponible",
+  invalidToolDataMessage:
+    "Les données renvoyées ne correspondent pas au format attendu par cette vue.",
+  modelPath: "Chemin du modèle",
+  modelRoot: "Modèle",
+  back: "Revenir au parent",
+  retainedLevels: "Niveaux précédents",
+  navigationUnavailable:
+    "La navigation est indisponible dans cet hôte ou cette capture enregistrée.",
+  loadingChildren: "Chargement des enfants…",
+  navigationFailed: "Impossible d’ouvrir cet élément.",
+  openChildren: "Ouvrir {label}",
+  selectionPending: "En attente de l’acceptation de la sélection par l’hôte…",
+  selectionFailed: "L’hôte n’a pas accepté la sélection.",
+  authoredConstraintsOnly: "Contraintes déclarées",
+  authoredConstraintsNotValidated:
+    "Expressions déclarées ; mesures et validation non résolues.",
+  authoredConstraintsUnavailable: "Contraintes déclarées indisponibles",
+  authoredConstraintsBounded:
+    "Le détail des contraintes est chargé pour les 10 premières exigences.",
+  authoredConstraintsNotCaptured:
+    "Ce résultat ne contient pas le détail des contraintes déclarées.",
 
   unnamed: "(sans nom)",
   unnamedRequirement: "(exigence sans nom)",

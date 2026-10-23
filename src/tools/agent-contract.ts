@@ -6,6 +6,7 @@
  */
 
 import type { ToolAnnotations } from "@casys/mcp-server";
+import { constraintExtractOutputSchema } from "./constraint.ts";
 import type { SysonTool } from "./types.ts";
 
 export interface AgentToolContract {
@@ -194,6 +195,7 @@ const childrenOutputSchema = {
   additionalProperties: false,
   properties: {
     parentId: { type: "string" },
+    editingContextId: { type: "string", minLength: 1 },
     children: {
       type: "array",
       items: identitySchema,
@@ -361,7 +363,13 @@ const queryEvalOutputSchema = {
 const requirementsTraceOutputSchema = {
   type: "object",
   additionalProperties: false,
+  $defs: constraintExtractOutputSchema.$defs,
   properties: {
+    authoredConstraintsStatus: {
+      enum: ["available", "unavailable", "not-requested"],
+    },
+    authoredConstraintsError: { type: "string" },
+    authoredConstraints: constraintExtractOutputSchema,
     rootId: { type: "string" },
     requirementsCount: { type: "integer", minimum: 0 },
     traces: {
@@ -375,6 +383,20 @@ const requirementsTraceOutputSchema = {
             additionalProperties: false,
             properties: { id: { type: "string" }, label: { type: "string" } },
             required: ["id", "label"],
+          },
+          satisfactionLinks: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                relationship: identitySchema,
+                targets: { type: "array", items: identitySchema },
+                status: { enum: ["resolved", "unresolved"] },
+                error: { type: "string" },
+              },
+              required: ["relationship", "targets", "status"],
+            },
           },
           satisfiedBy: { type: "array", items: identitySchema },
           error: { type: "string" },
@@ -398,14 +420,51 @@ const requirementsTraceOutputSchema = {
   required: ["rootId", "requirementsCount", "traces", "coverage"],
 };
 
+const descriptionSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: { id: { type: "string" }, label: { type: "string" } },
+  required: ["id", "label"],
+};
 const diagramListOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    representations: { type: "array", items: identitySchema },
+    editingContextId: { type: "string", minLength: 1 },
+    representations: {
+      type: "array",
+      items: {
+        ...identitySchema,
+        properties: {
+          ...identitySchema.properties,
+          description: descriptionSchema,
+        },
+      },
+    },
     count: { type: "integer", minimum: 0 },
   },
   required: ["representations", "count"],
+};
+const diagramTypesOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    editingContextId: { type: "string", minLength: 1 },
+    elementId: { type: "string", minLength: 1 },
+    availableTypes: {
+      type: "array",
+      items: {
+        ...descriptionSchema,
+        properties: {
+          ...descriptionSchema.properties,
+          category: { enum: ["diagram", "table", "other"] },
+        },
+        required: ["id", "label", "category"],
+      },
+    },
+    count: { type: "integer", minimum: 0 },
+  },
+  required: ["editingContextId", "elementId", "availableTypes", "count"],
 };
 
 const diagramCreateOutputSchema = {
@@ -466,6 +525,18 @@ const diagramSnapshotOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    editingContextId: { type: "string", minLength: 1 },
+    targetObjectId: { type: "string" },
+    metadata: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        label: { type: "string" },
+        kind: { type: "string" },
+        description: descriptionSchema,
+      },
+      required: ["label", "kind", "description"],
+    },
     diagramId: { type: "string" },
     diagramLabel: { type: "string" },
     nodeCount: { type: "integer", minimum: 0 },
@@ -475,7 +546,45 @@ const diagramSnapshotOutputSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        properties: { id: { type: "string" }, label: { type: "string" } },
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          targetObjectId: { type: "string" },
+          type: { type: "string" },
+          parentId: { type: "string" },
+          kind: { enum: ["node", "compartment", "port"] },
+          hasLayout: { type: "boolean" },
+          outsideLabels: { type: "array", items: { type: "string" } },
+          style: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              kind: {
+                enum: [
+                  "ImageNodeStyle",
+                  "IconLabelNodeStyle",
+                  "RectangularNodeStyle",
+                  "SysMLPackageNodeStyle",
+                  "SysMLImportedPackageNodeStyle",
+                  "SysMLNoteNodeStyle",
+                  "SysMLViewFrameNodeStyle",
+                  "EllipseNodeStyle",
+                ],
+              },
+              background: { type: "string" },
+              borderColor: { type: "string" },
+              borderRadius: { type: "number", minimum: 0 },
+              borderSize: { type: "number", minimum: 0 },
+              borderStyle: { type: "string" },
+              imageURL: { type: "string" },
+            },
+            required: ["kind"],
+          },
+          x: { type: "number" },
+          y: { type: "number" },
+          width: { type: "number", minimum: 0 },
+          height: { type: "number", minimum: 0 },
+        },
         required: ["id", "label"],
       },
     },
@@ -489,6 +598,19 @@ const diagramSnapshotOutputSchema = {
           sourceId: { type: "string" },
           targetId: { type: "string" },
           label: { type: "string" },
+          targetObjectId: { type: "string" },
+          type: { type: "string" },
+          beginLabel: { type: "string" },
+          endLabel: { type: "string" },
+          routingPoints: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { x: { type: "number" }, y: { type: "number" } },
+              required: ["x", "y"],
+            },
+          },
         },
         required: ["id", "sourceId", "targetId"],
       },
@@ -576,6 +698,10 @@ const CONTRACTS: Record<string, AgentToolContract> = {
   },
   syson_part_structure: { annotations: readOnly },
 
+  syson_diagram_types: {
+    annotations: readOnly,
+    outputSchema: diagramTypesOutputSchema,
+  },
   syson_diagram_list: {
     annotations: readOnly,
     outputSchema: diagramListOutputSchema,

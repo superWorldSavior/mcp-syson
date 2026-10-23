@@ -8,6 +8,7 @@ import {
   ElementIdent,
   ElementProvenance,
   ElementReading,
+  PathBar,
   SemanticElement,
   SemanticList,
   StateMessage,
@@ -23,7 +24,6 @@ import {
 } from "../../shared/component-catalog";
 import {
   definePreactComponent,
-  publishSelection,
   startSysonViewerApp,
   type SurfaceAppContext,
   surfaceLabel,
@@ -31,12 +31,29 @@ import {
   type SysonViewData,
 } from "../../shared/preact-surface";
 import { isDiagramSnapshot } from "../../shared/recorded-content";
+import { diagramMessages } from "./diagram-messages";
+import { SelectionBasket } from "../../shared/SelectionBasket";
+import { useSysonSelection } from "../../shared/selection-hooks";
+import { createSelectionGesture } from "../../shared/selection-gesture";
+import {
+  diagramNavigationAllowed,
+  dragCrossedThreshold,
+  fitDiagram,
+  pointerToDiagram,
+  rectangleBetween,
+  semanticDiagramMember,
+  syncDiagramSelection,
+  toolContent,
+  whollyEnclosed,
+} from "./diagram-model";
 import { sanitizeDiagramSvg } from "./sanitize-svg";
 import "../../global.css";
 
 interface DiagramNode {
   id: string;
   label: string;
+  targetObjectId?: string;
+  type?: string;
 }
 
 interface DiagramSnapshot extends Record<string, unknown> {
@@ -44,10 +61,308 @@ interface DiagramSnapshot extends Record<string, unknown> {
   diagramLabel: string;
   nodeCount: number;
   edgeCount: number;
+  editingContextId?: string;
+  targetObjectId?: string;
+  metadata?: { kind?: string; description?: { id: string; label: string } };
   nodes: DiagramNode[];
+  edges?: DiagramNode[];
   svg: string;
   renderer: "local" | "external";
   rendererWarning?: string;
+}
+
+const sessions = new WeakMap<
+  object,
+  { source: DiagramSnapshot; data: DiagramSnapshot; listeners: Set<() => void> }
+>();
+function useDiagram(
+  context: SurfaceAppContext<DiagramSnapshot>,
+  source: DiagramSnapshot,
+) {
+  let session = sessions.get(context.app);
+  if (!session || session.source !== source) {
+    session = { source, data: source, listeners: new Set() };
+    sessions.set(context.app, session);
+  }
+  const [, refresh] = useState(0);
+  useEffect(() => {
+    const listener = () => refresh((value) => value + 1);
+    session.listeners.add(listener);
+    return () => session.listeners.delete(listener);
+  }, [session]);
+  return {
+    data: session.data,
+    setData: (data: DiagramSnapshot) => {
+      session.data = data;
+      for (const listener of session.listeners) listener();
+    },
+  };
+}
+function DiagramPart(
+  { source, context, part }: {
+    source: DiagramSnapshot;
+    context: SurfaceAppContext<DiagramSnapshot>;
+    part: "summary" | "visual" | "elements" | "identity";
+  },
+) {
+  const { data, setData } = useDiagram(context, source);
+  if (part === "summary") return <Summary data={data} context={context} />;
+  if (part === "elements") return <Elements data={data} context={context} />;
+  if (part === "identity") return <Identity data={data} context={context} />;
+  return <Visual data={data} context={context} onSwitch={setData} />;
+}
+function useDetail(
+  context: SurfaceAppContext<DiagramSnapshot>,
+  data: DiagramSnapshot,
+) {
+  const dt = diagramMessages(context.hostContext.locale);
+  const [detail, setDetail] = useState<DiagramNode>();
+  const [content, setContent] = useState<Record<string, unknown>>();
+  const [error, setError] = useState<string>();
+  const epoch = useRef(0);
+  useEffect(() => {
+    epoch.current++;
+    setDetail(undefined);
+    setContent(undefined);
+    setError(undefined);
+  }, [data.diagramId]);
+  const open = async (member: DiagramNode) => {
+    const request = ++epoch.current;
+    setDetail(member);
+    setContent(undefined);
+    setError(undefined);
+    if (
+      context.state.currentData?.recorded ||
+      !context.capabilities.serverTools || !data.editingContextId
+    ) return;
+    try {
+      const result = toolContent(
+        await context.callTool("syson_element_get", {
+          editing_context_id: data.editingContextId,
+          element_id: member.targetObjectId,
+        }),
+      );
+      if (request === epoch.current) setContent(result);
+    } catch (error) {
+      if (request === epoch.current) setError(String(error));
+    }
+  };
+  const panel = detail && (
+    <section>
+      <PathBar
+        label={dt("Diagram path")}
+        items={[{ id: data.diagramId, label: data.diagramLabel }, {
+          id: detail.targetObjectId!,
+          label: detail.label || detail.targetObjectId,
+        }]}
+        currentId={detail.targetObjectId!}
+        onSelect={(id) => {
+          if (id === data.diagramId) {
+            epoch.current++;
+            setDetail(undefined);
+          }
+        }}
+      />
+      <p>
+        {detail.label || detail.targetObjectId} ·{" "}
+        {detail.type || dt("SysML element")} · {detail.targetObjectId}
+      </p>
+      {content && (
+        <SemanticElement
+          reference={sysmlRef("element", detail.targetObjectId!)}
+          density="card"
+          ident={
+            <ElementIdent
+              label={typeof content.label === "string"
+                ? content.label
+                : detail.label || detail.targetObjectId!}
+              detail={typeof content.kind === "string"
+                ? content.kind
+                : detail.type}
+            />
+          }
+        />
+      )}
+      {error && (
+        <StateMessage tone="warning" title={dt("Element details")}>
+          {error}
+        </StateMessage>
+      )}
+      {!content && !error && (
+        <p>
+          {context.state.currentData?.recorded
+            ? dt("Recorded element identity; live details are unavailable.")
+            : !context.capabilities.serverTools || !data.editingContextId
+            ? dt("Live element details are unavailable in this host.")
+            : dt("Loading element details…")}
+        </p>
+      )}
+    </section>
+  );
+  return { open, panel };
+}
+
+function ViewChooser(
+  { data, context, onSwitch }: {
+    data: DiagramSnapshot;
+    context: SurfaceAppContext<DiagramSnapshot>;
+    onSwitch: (data: DiagramSnapshot) => void;
+  },
+) {
+  const dt = diagramMessages(context.hostContext.locale);
+  const [views, setViews] = useState<
+    {
+      id: string;
+      label: string;
+      kind?: string;
+      description?: { label: string };
+    }[]
+  >([]);
+  const [types, setTypes] = useState<
+    { id: string; label: string; category: string }[]
+  >([]);
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const request = useRef(0);
+  const live = diagramNavigationAllowed({
+    recorded: !!context.state.currentData?.recorded,
+    serverTools: !!context.capabilities.serverTools,
+    editingContextId: data.editingContextId,
+  });
+  useEffect(() => {
+    request.current++;
+    setViews([]);
+    setTypes([]);
+    setError(undefined);
+    setBusy(false);
+    return () => {
+      request.current++;
+    };
+  }, [data.editingContextId, data.diagramId, live]);
+  const load = async () => {
+    if (!live) return;
+    const epoch = ++request.current;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = toolContent(
+        await context.callTool("syson_diagram_list", {
+          editing_context_id: data.editingContextId,
+        }),
+      );
+      if (epoch !== request.current) return;
+      setViews(
+        Array.isArray(result.representations) ? result.representations : [],
+      );
+      if (data.targetObjectId) {
+        const available = toolContent(
+          await context.callTool("syson_diagram_types", {
+            editing_context_id: data.editingContextId,
+            element_id: data.targetObjectId,
+          }),
+        );
+        if (epoch === request.current) {
+          setTypes(
+            Array.isArray(available.availableTypes)
+              ? available.availableTypes
+              : [],
+          );
+        }
+      }
+    } catch (error) {
+      if (epoch === request.current) setError(String(error));
+    } finally {
+      if (epoch === request.current) setBusy(false);
+    }
+  };
+  const select = async (id: string) => {
+    if (!live || id === data.diagramId) return;
+    const view = views.find((view) => view.id === id);
+    if (!view) return;
+    if (!/diagram/i.test(view.kind || "")) {
+      setError(
+        dt(
+          "This representation needs a table or dedicated viewer; no SVG snapshot was requested.",
+        ),
+      );
+      return;
+    }
+    const epoch = ++request.current;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = toolContent(
+        await context.callTool("syson_diagram_snapshot", {
+          editing_context_id: data.editingContextId,
+          diagram_id: id,
+        }),
+      );
+      if (epoch === request.current) {
+        if (!isDiagramSnapshot(result)) {
+          throw new Error("Invalid diagram snapshot");
+        }
+        onSwitch(result as DiagramSnapshot);
+      }
+    } catch (error) {
+      if (epoch === request.current) setError(String(error));
+    } finally {
+      if (epoch === request.current) setBusy(false);
+    }
+  };
+  return (
+    <Card title={dt("Views")}>
+      <p>
+        {data.metadata?.description?.label || dt("Diagram")} ·{" "}
+        {data.diagramLabel}
+      </p>
+      {live
+        ? (
+          <Button disabled={busy} onClick={load}>
+            {busy ? dt("Loading…") : dt("Browse existing views")}
+          </Button>
+        )
+        : (
+          <p>
+            {context.state.currentData?.recorded
+              ? dt("Recorded view: live navigation is unavailable.")
+              : dt("Live view navigation is unavailable in this host.")}
+          </p>
+        )}
+      {!!views.length && (
+        <label>
+          {dt("Existing view")}{" "}
+          <select
+            disabled={busy}
+            value={data.diagramId}
+            onChange={(event) => void select(event.currentTarget.value)}
+          >
+            {views.map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.label} ·{" "}
+                {view.description?.label || view.kind || dt("Representation")}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {!!types.length && (
+        <p>
+          {dt("Available native types (no view created):")} {types.map((type) =>
+            `${type.label}${
+              type.category === "table"
+                ? ` ${dt("(table viewer required)")}`
+                : ""
+            }`
+          ).join(" · ")}
+        </p>
+      )}
+      {error && (
+        <StateMessage tone="warning" title={dt("View navigation")}>
+          {error}
+        </StateMessage>
+      )}
+    </Card>
+  );
 }
 
 function Summary(
@@ -90,23 +405,87 @@ function Summary(
 }
 
 function Visual(
-  { data, context }: {
+  { data, context, onSwitch }: {
     data: DiagramSnapshot;
     context: SurfaceAppContext<DiagramSnapshot>;
+    onSwitch: (data: DiagramSnapshot) => void;
   },
 ) {
   const t = sysonMessages(context.hostContext.locale);
+  const dt = diagramMessages(context.hostContext.locale);
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const pointerStart = useRef({ x: 0, y: 0 });
+  const [mode, setMode] = useState<"select" | "pan">("select");
+  const [marquee, setMarquee] = useState<
+    { x: number; y: number; width: number; height: number }
+  >();
+  const suppressClick = useRef(false);
+  const pressedMember = useRef<DiagramNode>();
+  const cancelDrag = () => {
+    activePointer.current = undefined;
+    setDragging(false);
+    setMarquee(undefined);
+  };
   const activePointer = useRef<number>();
+  const transformRef = useRef({ scale, translate });
+  transformRef.current = { scale, translate };
 
   const fit = useCallback(() => {
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
+    const container = containerRef.current;
+    const svg = container?.querySelector("svg");
+    if (!container || !svg) return;
+    const rect = svg.getBoundingClientRect();
+    const canvas = container.getBoundingClientRect();
+    const transform = transformRef.current;
+    const bounds = {
+      x: (rect.left - canvas.left - transform.translate.x) / transform.scale,
+      y: (rect.top - canvas.top - transform.translate.y) / transform.scale,
+      width: rect.width / transform.scale,
+      height: rect.height / transform.scale,
+    };
+    const next = fitDiagram(bounds, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    setScale(next.scale);
+    setTranslate({ x: next.x, y: next.y });
   }, []);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [data.svg, fit]);
+  const { controller, snapshot } = useSysonSelection(
+    context,
+    data.editingContextId || data.diagramId,
+  );
+  const { open, panel } = useDetail(context, data);
+  const members = [...data.nodes, ...(data.edges || [])];
+  const memberAt = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return undefined;
+    const group = target.closest("[data-node-id], [data-edge-id]");
+    return semanticDiagramMember(
+      members,
+      group?.getAttribute("data-node-id") ||
+        group?.getAttribute("data-edge-id") || null,
+    );
+  };
+  const gestureFor = (member: DiagramNode) =>
+    createSelectionGesture(controller, {
+      reference: sysmlRef(
+        "element",
+        member.targetObjectId!,
+        recordedProjectionDigest(context),
+      ),
+      label: member.label || member.targetObjectId!,
+    }, () => open(member));
 
   const zoomBy = useCallback((factor: number) => {
     setScale((value) => Math.min(Math.max(value * factor, 0.1), 5));
@@ -114,6 +493,7 @@ function Visual(
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
+    if (activePointer.current !== undefined) return;
     zoomBy(event.deltaY > 0 ? 0.9 : 1.1);
   }, [zoomBy]);
   useEffect(() => {
@@ -123,6 +503,16 @@ function Visual(
     return () => node.removeEventListener("wheel", handleWheel);
   }, [handleWheel]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    syncDiagramSelection(
+      container.querySelectorAll("g[data-node-id],g[data-edge-id]"),
+      members,
+      snapshot.items.map((item) => item.reference.id),
+    );
+  }, [data.svg, data.nodes, data.edges, snapshot.items]);
+
   if (!data.svg) {
     return (
       <StateMessage title={t("noDiagram")}>
@@ -130,7 +520,11 @@ function Visual(
       </StateMessage>
     );
   }
-  const admitted = sanitizeDiagramSvg(data.svg);
+  const admitted = sanitizeDiagramSvg(
+    data.svg,
+    members,
+    [],
+  );
   if (admitted.status === "unavailable") {
     return (
       <StateMessage tone="warning" title={t("diagramUnavailable")}>
@@ -140,6 +534,10 @@ function Visual(
   }
   return (
     <>
+      <style>
+        {`.syson-diagram-stage g[data-selected="true"] { filter: drop-shadow(0 0 3px var(--mcp-view-accent, #0d7c8a)) drop-shadow(0 0 1px var(--mcp-view-accent, #0d7c8a)); }`}
+      </style>
+      <ViewChooser data={data} context={context} onSwitch={onSwitch} />
       {data.rendererWarning && (
         <StateMessage tone="warning" title={t("rendererWarning")}>
           {data.rendererWarning}
@@ -150,6 +548,24 @@ function Visual(
         title={data.diagramLabel || t("diagramFallback")}
         actions={
           <Toolbar label={t("zoomControls")}>
+            <Button
+              aria-pressed={mode === "select"}
+              onClick={() => {
+                cancelDrag();
+                setMode("select");
+              }}
+            >
+              {dt("Select")}
+            </Button>
+            <Button
+              aria-pressed={mode === "pan"}
+              onClick={() => {
+                cancelDrag();
+                setMode("pan");
+              }}
+            >
+              {dt("Pan")}
+            </Button>
             <Button title={t("zoomIn")} onClick={() => zoomBy(1.2)}>
               {t("zoomIn")}
             </Button>
@@ -167,11 +583,34 @@ function Visual(
           ref={containerRef}
           aria-label={t("diagramCanvasAria")}
           className={`syson-diagram-canvas ${
-            dragging ? "cursor-grabbing" : "cursor-grab"
+            mode === "select"
+              ? "cursor-crosshair"
+              : dragging
+              ? "cursor-grabbing"
+              : "cursor-grab"
           }`}
           role="group"
           tabIndex={0}
+          onClick={(event) => {
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              event.preventDefault();
+              return;
+            }
+            const member = memberAt(event.target) || pressedMember.current;
+            if (member) gestureFor(member).onClick(event);
+          }}
+          onDblClick={(event) => {
+            if (suppressClick.current) return;
+            const member = memberAt(event.target) || pressedMember.current;
+            if (member) gestureFor(member).onDoubleClick();
+          }}
           onKeyDown={(event) => {
+            const member = memberAt(event.target);
+            if (member) {
+              gestureFor(member).onKeyDown(event);
+              return;
+            }
             if (event.key === "+" || event.key === "=") {
               event.preventDefault();
               zoomBy(1.2);
@@ -185,43 +624,170 @@ function Visual(
           }}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
+            suppressClick.current = false;
+            pressedMember.current = memberAt(event.target);
             activePointer.current = event.pointerId;
             event.currentTarget.setPointerCapture(event.pointerId);
-            setDragging(true);
+            pointerStart.current = { x: event.clientX, y: event.clientY };
             dragStart.current = {
               x: event.clientX - translate.x,
               y: event.clientY - translate.y,
             };
+            setDragging(true);
           }}
           onPointerMove={(event) => {
-            if (!dragging || activePointer.current !== event.pointerId) return;
-            setTranslate({
-              x: event.clientX - dragStart.current.x,
-              y: event.clientY - dragStart.current.y,
-            });
+            if (activePointer.current !== event.pointerId) return;
+            const point = { x: event.clientX, y: event.clientY };
+            suppressClick.current = dragCrossedThreshold(
+              suppressClick.current,
+              pointerStart.current,
+              point,
+            );
+            if (!suppressClick.current) return;
+            if (mode === "pan") {
+              setTranslate({
+                x: event.clientX - dragStart.current.x,
+                y: event.clientY - dragStart.current.y,
+              });
+              return;
+            }
+            const container = event.currentTarget;
+            const bounds = container.getBoundingClientRect();
+            const origin = {
+              left: bounds.left + container.clientLeft,
+              top: bounds.top + container.clientTop,
+              scrollLeft: container.scrollLeft,
+              scrollTop: container.scrollTop,
+            };
+            setMarquee(
+              rectangleBetween(
+                pointerToDiagram(pointerStart.current, origin, {
+                  x: 0,
+                  y: 0,
+                  scale: 1,
+                }),
+                pointerToDiagram(point, origin, { x: 0, y: 0, scale: 1 }),
+              ),
+            );
           }}
           onPointerUp={(event) => {
             if (activePointer.current !== event.pointerId) return;
-            activePointer.current = undefined;
-            setDragging(false);
-            event.currentTarget.releasePointerCapture(event.pointerId);
+            const container = event.currentTarget;
+            const end = { x: event.clientX, y: event.clientY };
+            const dragged = dragCrossedThreshold(
+              suppressClick.current,
+              pointerStart.current,
+              end,
+            );
+            suppressClick.current = dragged;
+            if (mode === "select" && dragged) {
+              const viewport = container.getBoundingClientRect();
+              const origin = {
+                left: viewport.left + container.clientLeft,
+                top: viewport.top + container.clientTop,
+                scrollLeft: container.scrollLeft,
+                scrollTop: container.scrollTop,
+              };
+              const transform = { ...translate, scale };
+              const box = rectangleBetween(
+                pointerToDiagram(pointerStart.current, origin, transform),
+                pointerToDiagram(end, origin, transform),
+              );
+              const enclosed = new Map<string, DiagramNode>();
+              for (
+                const group of container.querySelectorAll<SVGGElement>(
+                  "g[data-node-id],g[data-edge-id]",
+                )
+              ) {
+                const member = memberAt(group);
+                if (!member) continue;
+                const bounds = group.getBoundingClientRect();
+                const rect = rectangleBetween(
+                  pointerToDiagram(
+                    { x: bounds.left, y: bounds.top },
+                    origin,
+                    transform,
+                  ),
+                  pointerToDiagram(
+                    { x: bounds.right, y: bounds.bottom },
+                    origin,
+                    transform,
+                  ),
+                );
+                if (whollyEnclosed(box, rect)) {
+                  enclosed.set(
+                    member.targetObjectId!,
+                    member,
+                  );
+                }
+              }
+              if (enclosed.size) {
+                void controller.setItems(
+                  [...enclosed.values()].map((member) => ({
+                    reference: sysmlRef(
+                      "element",
+                      member.targetObjectId!,
+                      recordedProjectionDigest(context),
+                    ),
+                    label: member.label || member.targetObjectId!,
+                  })),
+                  "add",
+                );
+              }
+            }
+            cancelDrag();
+            if (container.hasPointerCapture(event.pointerId)) {
+              container
+                .releasePointerCapture(event.pointerId);
+            }
           }}
           onPointerCancel={() => {
-            activePointer.current = undefined;
-            setDragging(false);
+            suppressClick.current = true;
+            cancelDrag();
+          }}
+          onLostPointerCapture={() => {
+            cancelDrag();
           }}
         >
+          {marquee && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                pointerEvents: "none",
+                zIndex: 1,
+                left: marquee.x,
+                top: marquee.y,
+                width: marquee.width,
+                height: marquee.height,
+                border: "1px solid var(--mcp-view-accent,#0d7c8a)",
+                background:
+                  "color-mix(in srgb,var(--mcp-view-accent,#0d7c8a) 15%,transparent)",
+              }}
+            />
+          )}
           <div
             className="syson-diagram-stage"
             style={{
               transform:
                 `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
               transformOrigin: "0 0",
+              transition: "none",
             }}
             dangerouslySetInnerHTML={{ __html: admitted.markup }}
           />
         </div>
-        <p className="syson-diagram-help">{t("diagramHelp")}</p>
+        <SelectionBasket
+          context={context}
+          controller={controller}
+          snapshot={snapshot}
+        />
+        {panel}
+        <p className="syson-diagram-help">
+          {t("diagramHelp")} {dt(
+            "Drag background to add fully enclosed elements. Switch to Pan to move the diagram.",
+          )}
+        </p>
       </Card>
     </>
   );
@@ -234,48 +800,78 @@ function Elements(
   },
 ) {
   const t = sysonMessages(context.hostContext.locale);
-  const [selected, setSelected] = useState<string>();
-  const digest = recordedProjectionDigest(context);
-  if (!data.nodes?.length) {
-    return (
-      <StateMessage title={t("noElements")}>
-        {t("noSemanticElements")}
-      </StateMessage>
-    );
-  }
+  const { controller, snapshot } = useSysonSelection(
+    context,
+    data.editingContextId || data.diagramId,
+  );
+  const { open, panel } = useDetail(context, data);
+  const dt = diagramMessages(context.hostContext.locale);
+  const members = [...data.nodes, ...(data.edges || [])];
+  const semantic = members.filter((node) => node.targetObjectId?.trim());
   return (
     <Card
       title={t("diagramElements")}
-      actions={<Badge>{data.nodes.length}</Badge>}
+      actions={<Badge>{semantic.length}</Badge>}
     >
+      {!semantic.length && (
+        <StateMessage title={t("noElements")}>
+          {dt(
+            "This snapshot has no semantic element identities. Graphical IDs cannot be added to context.",
+          )}
+        </StateMessage>
+      )}
       <SemanticList label={t("diagramElements")} scrollable>
-        {data.nodes.map((node) => (
-          <SemanticElement
-            key={node.id}
-            reference={sysmlRef("diagram-node", node.id, digest)}
-            density="row"
-            selected={selected === node.id}
-            ident={
-              <ElementIdent
-                label={node.label || t("unnamed")}
-                detail={node.id}
+        {semantic.map((node) => {
+          const item = {
+            reference: sysmlRef(
+              "element",
+              node.targetObjectId!,
+              recordedProjectionDigest(context),
+            ),
+            label: node.label || node.targetObjectId!,
+          };
+          const gesture = createSelectionGesture(controller, item, () =>
+            open(node));
+          const selected = snapshot.items.some((entry) =>
+            entry.reference.id === node.targetObjectId
+          );
+          return (
+            <div
+              key={node.id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected}
+              onClick={gesture.onClick}
+              onDblClick={gesture.onDoubleClick}
+              onKeyDown={gesture.onKeyDown}
+            >
+              <SemanticElement
+                reference={item.reference}
+                density="row"
+                selected={selected}
+                ident={
+                  <ElementIdent
+                    label={item.label}
+                    detail={node.type || node.targetObjectId}
+                  />
+                }
               />
-            }
-            activationLabel={t("selectItem", {
-              label: node.label || node.id,
-            })}
-            onActivate={() => {
-              setSelected(node.id);
-              publishSelection(
-                context,
-                "select-node",
-                "syson.element.selected",
-                { nodeId: node.id, label: node.label },
-              );
-            }}
-          />
-        ))}
+            </div>
+          );
+        })}
       </SemanticList>
+      <p>
+        {dt(
+          "Click or Space: add/remove context. Double-click or Enter: inspect.",
+        )}
+      </p>
+      {snapshot.pending && <p>{dt("Updating context…")}</p>}
+      {snapshot.error && (
+        <StateMessage tone="warning" title={dt("Context selection")}>
+          {snapshot.error}
+        </StateMessage>
+      )}
+      {panel}
     </Card>
   );
 }
@@ -310,22 +906,42 @@ const registry = defineComponentRegistry<
   SurfaceAppContext<DiagramSnapshot>
 >({
   components: {
-    [keys[0]]: definePreactComponent({
-      title: "Diagram summary",
-      description: "Label and topology counts",
-    }, ({ data, context }) => <Summary data={data} context={context} />),
-    [keys[1]]: definePreactComponent({
-      title: "Diagram visual",
-      description: "Pan and zoom SVG canvas",
-    }, ({ data, context }) => <Visual data={data} context={context} />),
-    [keys[2]]: definePreactComponent({
-      title: "Diagram elements",
-      description: "Selectable semantic elements",
-    }, ({ data, context }) => <Elements data={data} context={context} />),
-    [keys[3]]: definePreactComponent({
-      title: "Diagram identity",
-      description: "Stable SysON diagram identifier",
-    }, ({ data, context }) => <Identity data={data} context={context} />),
+    [keys[0]]: definePreactComponent(
+      {
+        title: "Diagram summary",
+        description: "Label and topology counts",
+      },
+      ({ data, context }) => (
+        <DiagramPart source={data} context={context} part="summary" />
+      ),
+    ),
+    [keys[1]]: definePreactComponent(
+      {
+        title: "Diagram visual",
+        description: "Pan and zoom SVG canvas",
+      },
+      ({ data, context }) => (
+        <DiagramPart source={data} context={context} part="visual" />
+      ),
+    ),
+    [keys[2]]: definePreactComponent(
+      {
+        title: "Diagram elements",
+        description: "Selectable semantic elements",
+      },
+      ({ data, context }) => (
+        <DiagramPart source={data} context={context} part="elements" />
+      ),
+    ),
+    [keys[3]]: definePreactComponent(
+      {
+        title: "Diagram identity",
+        description: "Stable SysON diagram identifier",
+      },
+      ({ data, context }) => (
+        <DiagramPart source={data} context={context} part="identity" />
+      ),
+    ),
   },
   defaultSurface: defaultComponentSurface(VIEWER_DEFAULT_SURFACE_KEYS.diagram),
 });

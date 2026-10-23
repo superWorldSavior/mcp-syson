@@ -46,7 +46,7 @@ Deno.test("default surfaces foreground one bounded catalog key per resource", ()
     modelExplorer: ["syson.model.elements"],
     queryResults: ["syson.query.values"],
     requirements: ["syson.requirements.authored-list"],
-    requirementsTrace: ["syson.requirements.coverage"],
+    requirementsTrace: ["syson.requirements.trace-list"],
     validation: ["syson.validation.status"],
     value: ["syson.value.readout"],
   });
@@ -232,16 +232,16 @@ Deno.test("viewers reuse v2 primitives only where the data is truthful", async (
   assertEquals(diagram.includes("setTranslate"), true);
   assertEquals(diagram.includes("zoomBy"), true);
   assertEquals(diagram.includes("ElementVerdict"), false);
-  assertEquals(diagram.includes("PathBar"), false);
+  assertEquals(diagram.includes("PathBar"), true);
   assertEquals(diagram.includes("LimitGauge"), false);
 
   assertEquals(explorer.includes("SemanticElement"), true);
   assertEquals(explorer.includes("BadgeGroup"), true);
-  assertEquals(explorer.includes("SemanticList"), true);
+  assertEquals(explorer.includes("SelectionBasket"), true);
   assertEquals(explorer.includes("TextInput"), true);
   assertEquals(explorer.includes("InlineCode"), true);
-  assertEquals(explorer.includes("PathBar"), false);
-  assertEquals(explorer.includes("TreeList"), false);
+  assertEquals(explorer.includes("PathBar"), true);
+  assertEquals(explorer.includes("TreeList"), true);
   assertEquals(explorer.includes("aria-expanded"), false);
   assertEquals(explorer.includes("ElementVerdict"), false);
 

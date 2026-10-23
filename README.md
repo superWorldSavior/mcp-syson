@@ -25,6 +25,13 @@ one bounded job—explore model elements, inspect a diagram, read query values,
 review requirement links, check validation state or confirm a value—so a host
 can compose them without embedding a second modelling application.
 
+The model explorer keeps a path through visited branches, including each level's
+filter and scroll position. Model and diagram viewers use the same selection
+gestures, with a basket scoped to each viewer root: click or Space toggles a
+selection; double-click or Enter inspects while preserving it. Diagrams also
+support an additive selection rectangle and separate Select/Pan modes. See
+[Browse model elements and diagram views](docs/how-to/browse-model-views.md).
+
 The same operations remain usable in clients without MCP App support. No tool
 calls a language model: interpretation, approval and orchestration stay with the
 calling client.
@@ -77,6 +84,7 @@ semantics live in
 
 - [Getting started and configuration](docs/getting-started.md)
 - [Capabilities, safety and evidence](docs/capabilities-and-safety.md)
+- [Browse model elements and diagram views](docs/how-to/browse-model-views.md)
 - [MCP Apps and recorded viewer contracts](docs/mcp-apps.md)
 - [Provider APIs, architecture and development](docs/provider-development.md)
 - [Release history](CHANGELOG.md)

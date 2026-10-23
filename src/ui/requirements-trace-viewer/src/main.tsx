@@ -6,6 +6,7 @@ import {
   BadgeGroup,
   Button,
   Card,
+  DataTable,
   Disclosure,
   ElementBody,
   ElementIdent,
@@ -33,7 +34,6 @@ import {
 } from "../../shared/component-catalog";
 import {
   definePreactComponent,
-  publishSelection,
   startSysonViewerApp,
   type SurfaceAppContext,
   surfaceLabel,
@@ -41,12 +41,34 @@ import {
   type SysonViewData,
 } from "../../shared/preact-surface";
 import { isRequirementsTrace } from "../../shared/recorded-content";
+import { SelectionBasket } from "../../shared/SelectionBasket";
+import { useSysonSelection } from "../../shared/selection-hooks";
+import { createSelectionGesture } from "../../shared/selection-gesture";
+import {
+  type RequirementExpression,
+  requirementExpressionText,
+} from "./requirement-expression";
 import "../../global.css";
 
 interface TraceEntry {
   requirement: { id: string; label: string };
   satisfiedBy: Array<{ id: string; label: string; kind: string }>;
   error?: string;
+  satisfactionLinks?: Array<{
+    relationship: { id: string; label: string; kind: string };
+    targets: Array<{ id: string; label: string; kind: string }>;
+    status: "resolved" | "unresolved";
+    error?: string;
+  }>;
+  authoredConstraintsStatus?: "available" | "unavailable" | "not-requested";
+  authoredConstraintsError?: string;
+  authoredConstraints?: {
+    constraints: Array<
+      { id: string; name: string; expression: RequirementExpression }
+    >;
+    errors?: Array<{ id: string; name: string; error: string }>;
+    message?: string;
+  };
 }
 
 interface TraceData extends Record<string, unknown> {
@@ -185,7 +207,8 @@ function TraceList(
     );
   }
   const t = sysonMessages(context.hostContext.locale);
-  const [selected, setSelected] = useState<string>();
+  const [opened, setOpened] = useState<string>();
+  const { controller, snapshot } = useSysonSelection(context, data.rootId);
   const [mode, setMode] = useState<
     "all" | "linked" | "unlinked" | "unresolved"
   >("all");
@@ -194,81 +217,227 @@ function TraceList(
     mode === "all" || traceLinkStatus(trace) === mode
   );
   return (
-    <Card
-      title={t("requirements")}
-      actions={
-        <Toolbar label={t("coverageFilter")}>
-          {(["all", "linked", "unlinked", "unresolved"] as const).map(
-            (value) => (
-              <Button
-                key={value}
-                pressed={mode === value}
-                onClick={() => setMode(value)}
-              >
-                {value === "all" ? t("filterAll") : value}
-              </Button>
-            ),
-          )}
-        </Toolbar>
-      }
-    >
-      {rows.length
-        ? (
-          <SemanticList label={t("requirementTraces")} scrollable>
-            {rows.map((trace) => {
-              const relationStatus = traceLinkStatus(trace);
-              const linked = relationStatus === "linked";
-              return (
-                <SemanticElement
-                  key={trace.requirement.id}
-                  reference={sysmlRef(
+    <>
+      <Card
+        title={t("requirements")}
+        actions={
+          <Toolbar label={t("coverageFilter")}>
+            {(["all", "linked", "unlinked", "unresolved"] as const).map(
+              (value) => (
+                <Button
+                  key={value}
+                  pressed={mode === value}
+                  onClick={() => setMode(value)}
+                >
+                  {value === "all" ? t("filterAll") : value}
+                </Button>
+              ),
+            )}
+          </Toolbar>
+        }
+      >
+        {snapshot.error && (
+          <StateMessage tone="danger" title="error">
+            {snapshot.error}
+          </StateMessage>
+        )}
+        <ElementProvenance
+          label={t("linkCoverage")}
+          value={`${data.coverage.satisfied} / ${data.coverage.total}`}
+        />
+        <StateMessage title={t("authoredConstraintsOnly")}>
+          {t("authoredConstraintsNotValidated")}
+        </StateMessage>
+        {rows.length
+          ? (
+            <SemanticList label={t("requirementTraces")} scrollable>
+              {rows.map((trace) => {
+                const relationStatus = traceLinkStatus(trace);
+                const linked = relationStatus === "linked";
+                const item = {
+                  reference: sysmlRef(
                     "RequirementUsage",
                     trace.requirement.id,
                     digest,
-                  )}
-                  density="row"
-                  selected={selected === trace.requirement.id}
-                  tone={linked ? "info" : "warning"}
-                  ident={
-                    <ElementIdent
-                      label={trace.requirement.label ||
-                        t("unnamedRequirement")}
-                      detail={trace.error ?? trace.requirement.id}
+                  ),
+                  label: trace.requirement.label || trace.requirement.id,
+                  summary: trace.authoredConstraints?.constraints.map((
+                    constraint,
+                  ) => requirementExpressionText(constraint.expression)).join(
+                    "; ",
+                  ),
+                };
+                const gesture = createSelectionGesture(
+                  controller,
+                  item,
+                  () => setOpened(trace.requirement.id),
+                );
+                return (
+                  <div
+                    key={trace.requirement.id}
+                    tabIndex={0}
+                    role="group"
+                    aria-label={item.label}
+                    onClick={gesture.onClick}
+                    onDblClick={gesture.onDoubleClick}
+                    onKeyDown={(event) => {
+                      // Nested controls retain their native Space/Enter behavior.
+                      if (event.target === event.currentTarget) {
+                        gesture.onKeyDown(event);
+                      }
+                    }}
+                  >
+                    <SemanticElement
+                      key={trace.requirement.id}
+                      reference={sysmlRef(
+                        "RequirementUsage",
+                        trace.requirement.id,
+                        digest,
+                      )}
+                      density="row"
+                      selected={snapshot.items.some((item) =>
+                        item.reference.id === trace.requirement.id
+                      )}
+                      tone={linked ? "info" : "warning"}
+                      ident={
+                        <ElementIdent
+                          label={trace.requirement.label ||
+                            t("unnamedRequirement")}
+                          detail={trace.error}
+                        />
+                      }
+                      verdict={<ElementVerdict value={relationStatus} />}
+                      body={
+                        <ElementBody>
+                          {trace.authoredConstraints?.constraints.map((
+                            constraint,
+                          ) => (
+                            <ElementProvenance
+                              key={constraint.id}
+                              label={constraint.name || constraint.id}
+                              value={
+                                <InlineCode>
+                                  {requirementExpressionText(
+                                    constraint.expression,
+                                  )}
+                                </InlineCode>
+                              }
+                            />
+                          ))}
+                          {trace.authoredConstraintsStatus !== "available" && (
+                            <StateMessage
+                              tone="warning"
+                              title={t("authoredConstraintsUnavailable")}
+                            >
+                              {trace.authoredConstraintsError ||
+                                t(
+                                  trace.authoredConstraintsStatus ===
+                                      "not-requested"
+                                    ? "authoredConstraintsBounded"
+                                    : "authoredConstraintsNotCaptured",
+                                )}
+                            </StateMessage>
+                          )}
+                          {trace.authoredConstraintsStatus === "available" &&
+                            !trace.authoredConstraints?.constraints.length &&
+                            !trace.authoredConstraints?.errors?.length &&
+                            (
+                              <StateMessage
+                                title={t("noAuthoredRequirements")}
+                              />
+                            )}
+                          {trace.authoredConstraints?.errors?.map((error) => (
+                            <StateMessage
+                              key={error.id}
+                              tone="warning"
+                              title={error.name || error.id}
+                            >
+                              {error.error}
+                            </StateMessage>
+                          ))}
+                          <Button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setOpened(
+                                opened === trace.requirement.id
+                                  ? undefined
+                                  : trace.requirement.id,
+                              );
+                            }}
+                          >
+                            {t("technicalDetails")}
+                          </Button>
+                          {opened === trace.requirement.id && (
+                            <div
+                              onClick={(event) => event.stopPropagation()}
+                              onDblClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <ElementProvenance
+                                label={t("rootIdentity")}
+                                value={trace.requirement.id}
+                              />
+                              <DataTable
+                                label={t("satisfactionLinks")}
+                                rows={trace.satisfiedBy}
+                                rowKey={(target) => target.id}
+                                emptyLabel={t("noSatisfactionLinks")}
+                                columns={[
+                                  {
+                                    id: "label",
+                                    label: t("satisfiedByElements"),
+                                    render: (target) =>
+                                      target.label || target.id,
+                                  },
+                                  {
+                                    id: "kind",
+                                    label: t("kindSort"),
+                                    render: (target) =>
+                                      shortSysmlKind(target.kind),
+                                  },
+                                  {
+                                    id: "id",
+                                    label: t("rootIdentity"),
+                                    render: (target) => (
+                                      <InlineCode>{target.id}</InlineCode>
+                                    ),
+                                  },
+                                ]}
+                                onSelect={(target) => {
+                                  void controller.toggle({
+                                    reference: sysmlRef(
+                                      target.kind,
+                                      target.id,
+                                      digest,
+                                    ),
+                                    label: target.label || target.id,
+                                  });
+                                }}
+                              />
+                            </div>
+                          )}
+                        </ElementBody>
+                      }
                     />
-                  }
-                  verdict={<ElementVerdict value={relationStatus} />}
-                  activationLabel={t("selectItem", {
-                    label: trace.requirement.label || trace.requirement.id,
-                  })}
-                  onActivate={() => {
-                    setSelected(trace.requirement.id);
-                    publishSelection(
-                      context,
-                      "select-requirement",
-                      "syson.requirement.selected",
-                      {
-                        id: trace.requirement.id,
-                        label: trace.requirement.label,
-                        status: relationStatus,
-                        ...(relationStatus === "unresolved"
-                          ? {}
-                          : { satisfied: linked }),
-                      },
-                    );
-                  }}
-                />
-              );
-            })}
-          </SemanticList>
-        )
-        : (
-          <EmptyState>
-            {mode === "all"
-              ? t("noRequirements")
-              : t("noModeRequirements", { mode })}
-          </EmptyState>
-        )}
-    </Card>
+                  </div>
+                );
+              })}
+            </SemanticList>
+          )
+          : (
+            <EmptyState>
+              {mode === "all"
+                ? t("noRequirements")
+                : t("noModeRequirements", { mode })}
+            </EmptyState>
+          )}
+      </Card>
+      <SelectionBasket
+        context={context}
+        controller={controller}
+        snapshot={snapshot}
+      />
+    </>
   );
 }
 
@@ -325,6 +494,39 @@ function SatisfactionLinks(
                   ))}
                   {trace.error && <Badge tone="danger">{trace.error}</Badge>}
                 </BadgeGroup>
+                {trace.satisfactionLinks?.length
+                  ? (
+                    <DataTable
+                      label={t("satisfactionLinks")}
+                      rows={trace.satisfactionLinks}
+                      rowKey={(link) => link.relationship.id}
+                      columns={[
+                        {
+                          id: "relationship",
+                          label: t("satisfactionLinks"),
+                          render: (link) =>
+                            link.relationship.label ||
+                            shortSysmlKind(link.relationship.kind),
+                        },
+                        {
+                          id: "targets",
+                          label: t("satisfiedByElements"),
+                          render: (link) =>
+                            link.targets.map((target) =>
+                              target.label || target.id
+                            ).join(" · ") || link.error,
+                        },
+                        {
+                          id: "status",
+                          label: t("value"),
+                          render: (link) => (
+                            <ElementVerdict value={link.status} />
+                          ),
+                        },
+                      ]}
+                    />
+                  )
+                  : undefined}
               </ElementBody>
             }
           />

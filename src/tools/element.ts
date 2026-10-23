@@ -479,6 +479,7 @@ export const elementTools: SysonTool[] = [
 
       return {
         parentId: element_id,
+        editingContextId: editing_context_id,
         children: children.map((obj) => ({
           id: obj.id,
           kind: obj.kind,

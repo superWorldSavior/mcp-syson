@@ -466,3 +466,345 @@ Deno.test("kit startPreactSurfaceApp owns the lifecycle; facade delegates record
   assertEquals(source.includes("Recorded projection"), false);
   assertEquals(source.includes("hostcontextchanged"), false);
 });
+
+Deno.test("recorded resource search accepts empty native kind with strict identity", () => {
+  const result = {
+    query: "demo",
+    results: [{ id: "resource-1", kind: "", label: "Demo", iconURLs: [] }],
+    count: 1,
+  };
+  assertEquals(isQueryResult(result), true);
+  assertEquals(
+    isQueryResult({ ...result, results: [{ ...result.results[0], kind: 0 }] }),
+    false,
+  );
+  assertEquals(
+    isQueryResult({
+      ...result,
+      results: [{ ...result.results[0], iconURLs: [1] }],
+    }),
+    false,
+  );
+  assertEquals(
+    isQueryResult({
+      ...result,
+      results: [{ ...result.results[0], authority: "write" }],
+    }),
+    false,
+  );
+  assertEquals(isQueryResult({ ...result, count: 2 }), false);
+});
+
+Deno.test("recorded navigable snapshots and children accept only declared new fields", () => {
+  const node = {
+    id: "node",
+    label: "Part",
+    targetObjectId: "semantic",
+    type: "part",
+    kind: "node",
+    hasLayout: true,
+    x: 10,
+    y: 20,
+    width: 120,
+    height: 80,
+  };
+  const edge = {
+    id: "edge",
+    sourceId: "node",
+    targetId: "port",
+    targetObjectId: "relation",
+    type: "connection",
+    beginLabel: "start",
+    endLabel: "end",
+    routingPoints: [{ x: 10, y: 20 }],
+  };
+  const snapshot = {
+    diagramId: "diagram",
+    diagramLabel: "Architecture",
+    editingContextId: "ec",
+    targetObjectId: "root",
+    metadata: {
+      label: "Architecture",
+      kind: "Diagram",
+      description: { id: "description", label: "General View" },
+    },
+    nodeCount: 1,
+    edgeCount: 1,
+    nodes: [node],
+    edges: [edge],
+    svg: "<svg/>",
+    renderer: "local",
+  };
+  assertEquals(isDiagramSnapshot(snapshot), true);
+  assertEquals(
+    isDiagramSnapshot({ ...snapshot, nodes: [{ ...node, x: Infinity }] }),
+    false,
+  );
+  assertEquals(
+    isDiagramSnapshot({
+      ...snapshot,
+      edges: [{ ...edge, routingPoints: [{ x: 1, y: 2, execute: true }] }],
+    }),
+    false,
+  );
+  assertEquals(
+    isDiagramSnapshot({
+      ...snapshot,
+      metadata: { ...snapshot.metadata, authority: "write" },
+    }),
+    false,
+  );
+  assertEquals(
+    isDiagramSnapshot({
+      ...snapshot,
+      nodes: [{ ...node, authority: "write" }],
+    }),
+    false,
+  );
+  const children = {
+    parentId: "root",
+    children: [{ id: "part", kind: "PartUsage", label: "Part" }],
+    count: 1,
+    editingContextId: "ec",
+  };
+  assertEquals(isModelChildren(children), true);
+  assertEquals(isModelChildren({ ...children, editingContextId: "" }), false);
+  assertEquals(isModelChildren({ ...children, authority: "write" }), false);
+});
+
+Deno.test("authored requirement AST enrichment is closed, recursive and backward compatible", () => {
+  const trace = {
+    rootId: "root",
+    requirementsCount: 1,
+    traces: [{ requirement: { id: "req", label: "Limit" }, satisfiedBy: [] }],
+    coverage: { total: 1, satisfied: 0, unsatisfied: 1, percentage: 0 },
+  };
+  const expression = {
+    kind: "binary",
+    op: "<=",
+    left: { kind: "ref", featurePath: ["mass"], elementId: "mass" },
+    right: { kind: "literal", value: 3, unit: "kg" },
+  };
+  const enriched = {
+    ...trace,
+    authoredConstraintsStatus: "available",
+    authoredConstraints: {
+      constraints: [{
+        id: "constraint",
+        name: "Mass",
+        sourceId: "req",
+        expression,
+      }],
+      errors: [{ id: "other", name: "Other", error: "Unsupported" }],
+      message: "Partial extraction",
+    },
+  };
+  assertEquals(isRequirementsTrace(trace), true);
+  assertEquals(isRequirementsTrace(enriched), true);
+  assertEquals(
+    isRequirementsTrace({
+      ...trace,
+      authoredConstraintsStatus: "unavailable",
+      authoredConstraintsError: "offline",
+    }),
+    true,
+  );
+  assertEquals(
+    isRequirementsTrace({
+      ...trace,
+      authoredConstraintsStatus: "not-requested",
+    }),
+    true,
+  );
+  assertEquals(isRequirementsTrace({ ...enriched, authority: "write" }), false);
+  assertEquals(
+    isRequirementsTrace({
+      ...enriched,
+      authoredConstraintsStatus: "validated",
+    }),
+    false,
+  );
+  for (
+    const invalid of [
+      { ...expression, op: "execute" },
+      { ...expression, op: ["<="] },
+      { kind: "literal", value: NaN },
+      { kind: "literal", value: 3, authority: "write" },
+      { kind: "ref", featurePath: [4] },
+      { kind: "call", name: "f", args: [{ kind: "unknown" }] },
+    ]
+  ) {
+    assertEquals(
+      isRequirementsTrace({
+        ...enriched,
+        authoredConstraints: {
+          constraints: [{ id: "c", name: "C", expression: invalid }],
+        },
+      }),
+      false,
+    );
+  }
+  let nested: unknown = { kind: "literal", value: 1 };
+  for (let i = 0; i < 50; i++) {
+    nested = { kind: "unary", op: "-", operand: nested };
+  }
+  assertEquals(
+    isRequirementsTrace({
+      ...enriched,
+      authoredConstraints: {
+        constraints: [{ id: "c", name: "C", expression: nested }],
+      },
+    }),
+    false,
+  );
+  assertEquals(
+    isRequirementsTrace({
+      ...trace,
+      traces: [{
+        requirement: {
+          id: "req",
+          label: "Limit",
+          targetObjectId: "richer-diagram-field",
+        },
+        satisfiedBy: [],
+      }],
+    }),
+    false,
+  );
+});
+
+Deno.test("satisfaction links preserve relationship identity without accepting authority", () => {
+  const relationship = {
+    id: "satisfy",
+    kind: "SatisfyRequirementUsage",
+    label: "satisfy",
+  };
+  const target = { id: "part", kind: "PartUsage", label: "Part" };
+  const make = (link: unknown) => ({
+    rootId: "root",
+    requirementsCount: 1,
+    traces: [{
+      requirement: { id: "req", label: "Requirement" },
+      satisfiedBy: [],
+      satisfactionLinks: [link],
+    }],
+    coverage: { total: 1, satisfied: 0, unsatisfied: 1, percentage: 0 },
+  });
+  assertEquals(
+    isRequirementsTrace(
+      make({ relationship, targets: [target], status: "resolved" }),
+    ),
+    true,
+  );
+  assertEquals(
+    isRequirementsTrace(
+      make({
+        relationship,
+        targets: [],
+        status: "unresolved",
+        error: "Missing satisfying feature",
+      }),
+    ),
+    true,
+  );
+  assertEquals(
+    isRequirementsTrace(
+      make({ relationship, targets: [], status: "resolved" }),
+    ),
+    false,
+  );
+  assertEquals(
+    isRequirementsTrace(
+      make({ relationship, targets: [target], status: "unresolved" }),
+    ),
+    false,
+  );
+  assertEquals(
+    isRequirementsTrace(
+      make({
+        relationship: { ...relationship, authority: "write" },
+        targets: [target],
+        status: "resolved",
+      }),
+    ),
+    false,
+  );
+});
+
+Deno.test("mixed resolved and unresolved satisfaction remains conservatively uncovered", () => {
+  const relationship = {
+    id: "satisfy",
+    kind: "SatisfyRequirementUsage",
+    label: "satisfy",
+  };
+  const target = { id: "part", kind: "PartUsage", label: "Part" };
+  const trace = {
+    rootId: "root",
+    requirementsCount: 1,
+    traces: [{
+      requirement: { id: "req", label: "Requirement" },
+      satisfiedBy: [target],
+      error: "Another link is unresolved",
+      satisfactionLinks: [{
+        relationship,
+        targets: [target],
+        status: "resolved",
+      }, {
+        relationship: { ...relationship, id: "unresolved" },
+        targets: [],
+        status: "unresolved",
+        error: "Missing target",
+      }],
+    }],
+    coverage: { total: 1, satisfied: 0, unsatisfied: 1, percentage: 0 },
+  };
+  assertEquals(isRequirementsTrace(trace), true);
+  assertEquals(
+    isRequirementsTrace({
+      ...trace,
+      traces: [{ ...trace.traces[0], error: "" }],
+    }),
+    true,
+  );
+  assertEquals(
+    isRequirementsTrace({
+      ...trace,
+      coverage: { total: 1, satisfied: 1, unsatisfied: 0, percentage: 100 },
+    }),
+    false,
+  );
+});
+
+Deno.test("native diagram styles and outside labels stay structurally closed", () => {
+  const node = {
+    id: "initial",
+    label: "",
+    outsideLabels: ["Initial"],
+    style: {
+      kind: "EllipseNodeStyle",
+      background: "#000000",
+      borderColor: "#000000",
+      borderSize: 0,
+      borderStyle: "Solid",
+    },
+  };
+  const snapshot = {
+    diagramId: "d",
+    diagramLabel: "Control",
+    nodeCount: 1,
+    edgeCount: 0,
+    nodes: [node],
+    edges: [],
+    svg: "<svg/>",
+    renderer: "local",
+  };
+  assertEquals(isDiagramSnapshot(snapshot), true);
+  for (
+    const bad of [
+      { ...node, style: { ...node.style, authority: "write" } },
+      { ...node, style: { ...node.style, borderSize: -1 } },
+      { ...node, style: { ...node.style, kind: "ImaginaryStyle" } },
+      { ...node, outsideLabels: [1] },
+    ]
+  ) assertEquals(isDiagramSnapshot({ ...snapshot, nodes: [bad] }), false);
+});

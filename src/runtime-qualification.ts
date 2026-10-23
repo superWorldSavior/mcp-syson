@@ -343,7 +343,7 @@ export function assertBoundedToolContracts(tools: unknown): JsonRecord[] {
     syson_element_children: {
       inputProperties: ["editing_context_id", "element_id"],
       inputRequired: ["editing_context_id", "element_id"],
-      outputProperties: ["children", "count", "parentId"],
+      outputProperties: ["children", "count", "editingContextId", "parentId"],
       outputRequired: ["children", "count", "parentId"],
     },
   };
@@ -612,9 +612,21 @@ export async function qualifyRuntime(
   });
   assertExactKeys(
     childrenRead,
-    ["children", "count", "parentId"],
+    [
+      "children",
+      "count",
+      "parentId",
+      ...("editingContextId" in childrenRead ? ["editingContextId"] : []),
+    ],
     "root children readback structuredContent",
   );
+  if ("editingContextId" in childrenRead) {
+    assertEqual(
+      childrenRead.editingContextId,
+      editingContextId,
+      "root children editing context id",
+    );
+  }
   assertEqual(childrenRead.parentId, rootPackageId, "root children parent id");
   const matchingChildren = asArray(
     childrenRead.children,

@@ -50,7 +50,7 @@ export const VIEWER_DEFAULT_SURFACE_KEYS = {
   modelExplorer: ["syson.model.elements"],
   queryResults: ["syson.query.values"],
   requirements: ["syson.requirements.authored-list"],
-  requirementsTrace: ["syson.requirements.coverage"],
+  requirementsTrace: ["syson.requirements.trace-list"],
   validation: ["syson.validation.status"],
   value: ["syson.value.readout"],
 } as const;

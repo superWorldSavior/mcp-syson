@@ -78,3 +78,24 @@ Deno.test("diagram SVG attributes admit namespaces but no active references", ()
     "external-reference:fill",
   );
 });
+
+Deno.test("diagram semantic group metadata is passive and narrowly admitted", () => {
+  for (
+    const name of [
+      "data-node-id",
+      "data-edge-id",
+      "data-target-object-id",
+      "data-label",
+    ]
+  ) {
+    assertEquals(inspectDiagramSvgAttribute(name, "local-element"), undefined);
+  }
+  assertEquals(
+    inspectDiagramSvgAttribute("data-action", "execute"),
+    "unsupported-attribute:data-action",
+  );
+  assertEquals(
+    inspectDiagramSvgAttribute("data-target-object-id", "javascript:execute"),
+    "external-reference:data-target-object-id",
+  );
+});

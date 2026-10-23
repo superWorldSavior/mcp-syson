@@ -75,6 +75,10 @@ const ALLOWED_ATTRIBUTES = new Set([
   "class",
   "role",
   "aria-label",
+  "data-node-id",
+  "data-edge-id",
+  "data-target-object-id",
+  "data-label",
   "markerWidth",
   "markerHeight",
   "markerUnits",
@@ -116,6 +120,8 @@ interface SvgElementLike {
   readonly localName: string;
   readonly namespaceURI: string | null;
   readonly attributes: Iterable<SvgAttributeLike>;
+  getAttribute(name: string): string | null;
+  setAttribute(name: string, value: string): void;
   querySelectorAll(selector: string): Iterable<SvgElementLike>;
 }
 
@@ -162,7 +168,15 @@ export function inspectDiagramSvgSource(svg: string): string | undefined {
  * Any unsupported construct makes the whole visual unavailable; silently
  * deleting fragments could misrepresent an engineering diagram.
  */
-export function sanitizeDiagramSvg(svg: string): DiagramSvgAdmission {
+export function sanitizeDiagramSvg(
+  svg: string,
+  semanticMembers: readonly {
+    id: string;
+    targetObjectId?: string;
+    label?: string;
+  }[] = [],
+  selectedIds: readonly string[] = [],
+): DiagramSvgAdmission {
   const sourceReason = inspectDiagramSvgSource(svg);
   if (sourceReason) return { status: "unavailable", reason: sourceReason };
 
@@ -201,6 +215,28 @@ export function sanitizeDiagramSvg(svg: string): DiagramSvgAdmission {
       const value = attribute.value.trim();
       const reason = inspectDiagramSvgAttribute(name, value);
       if (reason) return { status: "unavailable", reason };
+    }
+  }
+
+  // Annotate the detached admitted document from the snapshot's identity table.
+  // SVG-provided labels and semantic IDs never authorize context selection.
+  for (const group of root.querySelectorAll("g")) {
+    const id = group.getAttribute("data-node-id") ||
+      group.getAttribute("data-edge-id");
+    const member = semanticMembers.find((member) =>
+      member.id === id && !!member.targetObjectId?.trim()
+    );
+    if (!member) continue;
+    group.setAttribute("tabindex", "0");
+    group.setAttribute("role", "button");
+    group.setAttribute("aria-label", member.label || member.targetObjectId!);
+    group.setAttribute(
+      "aria-pressed",
+      String(selectedIds.includes(member.targetObjectId!)),
+    );
+    if (selectedIds.includes(member.targetObjectId!)) {
+      group.setAttribute("stroke", "#0d7c8a");
+      group.setAttribute("stroke-width", "3");
     }
   }
 
