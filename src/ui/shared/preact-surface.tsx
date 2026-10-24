@@ -6,7 +6,7 @@
  * Human-facing viewer titles live in the HTML and component surface, not in appInfo.
  */
 
-import { readResultData, type ResultData } from "@casys/mcp-view";
+import { readResultData, type ResultData } from "@mcpview/view";
 import {
   createTranslator,
   mcpViewMessages,
@@ -14,15 +14,15 @@ import {
   type ViewComponentDefinition,
   type ViewComponentDescriptor,
   type ViewComponentRegistry,
-} from "@casys/mcp-view-components";
+} from "@mcpview/components";
 import {
   definePreactComponent as defineKitPreactComponent,
   type PreactSurfaceComponentProps,
   type PreactSurfaceContext,
   startPreactSurfaceApp,
   type SurfaceLabel,
-} from "@casys/mcp-view-components/preact";
-import { installMcpViewFonts } from "@casys/mcp-view-components/fonts";
+} from "@mcpview/components/preact";
+import { installMcpViewFonts } from "@mcpview/components/fonts";
 import { createElement, type FunctionComponent, render } from "preact";
 import { CasysCredit } from "./CasysCredit.tsx";
 import { SYSON_VIEW_APP_MANIFEST, type SysonViewKey } from "../app-manifest.ts";

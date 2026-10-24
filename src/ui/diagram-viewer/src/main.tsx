@@ -1,6 +1,6 @@
 /** Small composable SysON diagram components with a standalone default surface. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   Button,
@@ -13,7 +13,7 @@ import {
   SemanticElement,
   SemanticList,
   StateMessage,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   defaultComponentSurface,
@@ -512,6 +512,7 @@ function Visual(
   const { controller, snapshot } = useSysonSelection(
     context,
     data.editingContextId || data.diagramId,
+    data.editingContextId,
   );
   const { open, panel } = useDetail(context, data);
   const members = readableDiagramMembers(data.nodes, data.edges || [], {
@@ -580,9 +581,9 @@ function Visual(
     syncDiagramSelection(
       container.querySelectorAll("g[data-node-id],g[data-edge-id]"),
       members,
-      snapshot.items.map((item) => item.reference.id),
+      snapshot.desired.map((item) => item.reference.id),
     );
-  }, [data.svg, data.nodes, data.edges, snapshot.items]);
+  }, [data.svg, data.nodes, data.edges, snapshot.desired]);
 
   if (!data.svg) {
     return (
@@ -929,6 +930,7 @@ function Elements(
   const { controller, snapshot } = useSysonSelection(
     context,
     data.editingContextId || data.diagramId,
+    data.editingContextId,
   );
   const { open, panel } = useDetail(context, data);
   const dt = diagramMessages(context.hostContext.locale);
@@ -961,7 +963,7 @@ function Elements(
           };
           const gesture = createSelectionGesture(controller, item, () =>
             open(node));
-          const selected = snapshot.items.some((entry) =>
+          const selected = snapshot.desired.some((entry) =>
             entry.reference.id === node.targetObjectId
           );
           return (

@@ -1,6 +1,6 @@
 /** Documentary authored limits, without inferred measurements or satisfaction. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   CollectionCard,
@@ -11,7 +11,7 @@ import {
   EmptyState,
   SemanticElement,
   StateMessage,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import {
   defaultComponentSurface,
   recordedProjectionDigest,
@@ -110,7 +110,7 @@ function AuthoredList(
                         digest,
                       )}
                       density="row"
-                      selected={snapshot.items.some((item) =>
+                      selected={snapshot.desired.some((item) =>
                         item.reference.id === requirement.id
                       )}
                       ident={

@@ -435,7 +435,7 @@ Deno.test("kit startPreactSurfaceApp owns the lifecycle; facade delegates record
     new URL("../src/ui/shared/preact-surface.tsx", import.meta.url),
   );
   assertEquals(
-    source.includes('from "@casys/mcp-view-components/preact"') &&
+    source.includes('from "@mcpview/components/preact"') &&
       source.includes("startPreactSurfaceApp("),
     true,
   );

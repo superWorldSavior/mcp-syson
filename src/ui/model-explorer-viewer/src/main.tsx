@@ -1,6 +1,6 @@
 /** Composable model-explorer components for SysON element children. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   BadgeGroup,
@@ -14,7 +14,7 @@ import {
   SemanticElement,
   TextInput,
   TreeList,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   defaultComponentSurface,
@@ -38,7 +38,7 @@ import {
 } from "../../shared/recorded-content";
 import "../../global.css";
 
-import { readResultData } from "@casys/mcp-view";
+import { readResultData } from "@mcpview/view";
 import { SelectionBasket } from "../../shared/SelectionBasket";
 import { useSysonSelection } from "../../shared/selection-hooks";
 import { createSelectionGesture } from "../../shared/selection-gesture";
@@ -154,7 +154,11 @@ function Elements(
   ]);
   const navigation = navigationFor(context, data, rootId);
   const [view, setView] = useState(navigation.getSnapshot());
-  const { controller, snapshot } = useSysonSelection(context, rootId);
+  const { controller, snapshot } = useSysonSelection(
+    context,
+    rootId,
+    data.editingContextId,
+  );
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const unsubscribe = navigation.subscribe(() =>
@@ -259,7 +263,7 @@ function Elements(
                       <div
                         role="button"
                         tabIndex={0}
-                        aria-pressed={snapshot.items.some((selected) =>
+                        aria-pressed={snapshot.desired.some((selected) =>
                           selected.reference.id === element.id &&
                           selected.reference.kind === "element"
                         )}
@@ -271,7 +275,7 @@ function Elements(
                         <SemanticElement
                           reference={reference}
                           density="row"
-                          selected={snapshot.items.some((selected) =>
+                          selected={snapshot.desired.some((selected) =>
                             selected.reference.id === element.id &&
                             selected.reference.kind === "element"
                           )}

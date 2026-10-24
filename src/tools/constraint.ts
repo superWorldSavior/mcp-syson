@@ -19,7 +19,7 @@ import {
   toValueMap,
   type ValueMap,
 } from "@casys/constraint-solver";
-import type { StructuredToolResult } from "@casys/mcp-server";
+import type { StructuredToolResult } from "@mcpview/server";
 import type { SysonTool } from "./types.ts";
 import { evalAql, evalAqlObjects, getSelf } from "./aql.ts";
 import {

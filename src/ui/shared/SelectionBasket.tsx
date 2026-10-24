@@ -1,11 +1,11 @@
 /** Domain adapter for the shared MCP View context chip and its acknowledged controller. */
-import type { ResultData } from "@casys/mcp-view";
+import type { ResultData } from "@mcpview/view";
 import {
   ActiveContextChip,
   type ContextBasketLabels,
   MCP_VIEW_CONTEXT_BASKET_CSS,
-} from "@casys/mcp-view-components/preact/context";
-import { Button, Toolbar } from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/context";
+import { Toolbar } from "@mcpview/components/preact/components";
 import type { SurfaceAppContext } from "./preact-surface.tsx";
 import {
   type SelectionController,
@@ -88,6 +88,7 @@ export function SelectionBasket<T extends ResultData>(
                   ? "shared"
                   : undefined;
               }}
+              onRetry={() => controller.retry()}
               onClear={async () => {
                 const scope = controller.scopeVersion();
                 await controller.clear();
@@ -98,14 +99,6 @@ export function SelectionBasket<T extends ResultData>(
                   : undefined;
               }}
             />
-            {snapshot.error && (
-              <Button
-                disabled={snapshot.pending}
-                onClick={() => void controller.retry()}
-              >
-                {t.retry}
-              </Button>
-            )}
           </>
         )}
       </Toolbar>

@@ -8,7 +8,7 @@
  * @module lib/syson/tools/element
  */
 
-import type { StructuredToolResult } from "@casys/mcp-server";
+import type { StructuredToolResult } from "@mcpview/server";
 import type { SysonTool } from "./types.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { GET_CHILD_CREATION_DESCRIPTIONS, GET_OBJECT } from "../api/queries.ts";

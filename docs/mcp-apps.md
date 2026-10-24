@@ -215,38 +215,20 @@ the JSR module graph without evaluating unrelated HTML on each resource read.
 `server.ts` registers the generated HTML as MCP resources. Editing TSX without
 rebuilding leaves the served bundle stale.
 
-## Audited MCP View split
+## Published MCP View packages
 
-The viewer build intentionally has no fallback to the retired monolithic viewer
-package. It requires local file URLs for the audited split:
+Viewer builds resolve `@mcpview/view@0.11.0`, `@mcpview/components@0.12.0` and
+`@mcpview/contracts@0.2.0` directly from the npm lockfile. The server uses
+`@mcpview/server@0.30.0`. No sibling checkout or file-module environment
+variables are required. MCP Apps use ext-apps 2.x, the split MCP SDK v2 packages
+and Zod 4.2+.
 
-- `@casys/mcp-view@0.9.3` for the renderer-neutral lifecycle and router;
-- `@casys/mcp-view-contracts@0.1.0` for wire contracts;
-- `@casys/mcp-view-components@0.9.0` for catalogs, surfaces, theme, Preact
-  presentation, `FocusedView`/`Disclosure` and `createTranslator`.
-
-For a standard sibling `mcp-server` checkout:
-
-```bash
-export MCP_VIEW_MODULE=file:///absolute/path/to/mcp-server/packages/view/mod.ts
-export MCP_VIEW_COMPONENTS_MODULE=file:///absolute/path/to/mcp-server/packages/view-components/mod.ts
-export MCP_VIEW_CONTEXT_MODULE=file:///absolute/path/to/local-context-preview/preact-context.ts
-```
-
-`MCP_VIEW_CONTEXT_MODULE` is an explicit local preview of the shared context
-control extraction. It exports `ActiveContextChip`, its presentation types and
-`MCP_VIEW_CONTEXT_BASKET_CSS`, without importing another MCP Apps lifecycle.
-This control is not part of the pinned components release above. The preview
-records `casys-mcp-view-context=local-preview` in generated HTML. A reproducible
-released dependency and CI pin are required before this iteration can be
-published; the current CI pin alone does not supply this entry point.
-
-The resolver derives the contracts, Preact adapter and presentation entry points
-from those package exports. Alternate layouts may set
-`MCP_VIEW_CONTRACTS_MODULE`, `MCP_VIEW_COMPONENTS_PREACT_MODULE` and
-`MCP_VIEW_PRESENTATION_MODULE` explicitly. Every value must be a plain local
-`file:` URL exported by the expected package and version. CI checkouts the
-audited split at `b08802df353bb25d25a1c8d64b22ea61b5287ae0`.
+The published `/context` and `/preact/context` entries own acknowledged context
+state, serialized replacements, retries, click arbitration and the context chip.
+SysON maps semantic references and a graduated policy: compact fields for 1–3
+items, references for 4–8, and one `syson_query_eval` reproducer above eight.
+The query keeps the explicit editing context separate from the viewer root;
+recorded inputs without that context cannot fabricate a resolvable query.
 
 Interface labels, loading and empty copy, buttons, input names and `Intl`
 number/date formatting follow `context.hostContext.locale` through the kit

@@ -1,14 +1,12 @@
-/** Type-check all Apps against the same explicit local split as the build. */
+/** Type-check all Apps against the published dependency versions used by the build. */
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveSplitModules } from "./split-modules.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const split = resolveSplitModules();
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "mcp-syson-ui-check-"));
 const configPath = join(temporaryDirectory, "deno.json");
 const entries = [
@@ -27,6 +25,7 @@ try {
     `${
       JSON.stringify(
         {
+          minimumDependencyAge: { age: "P0D" },
           compilerOptions: {
             strict: true,
             jsx: "react-jsx",
@@ -41,21 +40,24 @@ try {
             ],
           },
           imports: {
-            "@casys/mcp-view": split.core.href,
-            "@casys/mcp-view-contracts": split.contracts.href,
-            "@casys/mcp-view-components": split.components.href,
-            "@casys/mcp-view-components/preact": split.componentsPreact.href,
-            "@casys/mcp-view-components/preact/components":
-              split.presentation.href,
-            "@casys/mcp-view-components/preact/context":
-              split.contextControls.href,
-            "@casys/mcp-view-components/fonts": split.fonts.href,
+            "@mcpview/view": "npm:@mcpview/view@0.11.0",
+            "@mcpview/view/context": "npm:@mcpview/view@0.11.0/context",
+            "@mcpview/contracts": "npm:@mcpview/contracts@0.2.0",
+            "@mcpview/components": "npm:@mcpview/components@0.12.0",
+            "@mcpview/components/preact":
+              "npm:@mcpview/components@0.12.0/preact",
+            "@mcpview/components/preact/components":
+              "npm:@mcpview/components@0.12.0/preact/components",
+            "@mcpview/components/preact/context":
+              "npm:@mcpview/components@0.12.0/preact/context",
+            "@mcpview/components/fonts": "npm:@mcpview/components@0.12.0/fonts",
             "@modelcontextprotocol/ext-apps":
-              "npm:@modelcontextprotocol/ext-apps@^1.7.4",
-            "@modelcontextprotocol/sdk":
-              "npm:@modelcontextprotocol/sdk@^1.29.0",
-            "@modelcontextprotocol/sdk/types.js":
-              "npm:@modelcontextprotocol/sdk@^1.29.0/types.js",
+              "npm:@modelcontextprotocol/ext-apps@^2.0.3",
+            "@modelcontextprotocol/client":
+              "npm:@modelcontextprotocol/client@^2.3.1",
+            "@modelcontextprotocol/core":
+              "npm:@modelcontextprotocol/core@^2.3.1",
+            zod: "npm:zod@^4.2.0",
             preact: "npm:preact@^10.28.3",
             "preact/hooks": "npm:preact@^10.28.3/hooks",
             "preact/jsx-runtime": "npm:preact@^10.28.3/jsx-runtime",
@@ -79,7 +81,9 @@ try {
     ],
     { cwd: here, stdio: "inherit" },
   );
-  console.log(`Checked ${entries.length} Apps against ${split.provenance}.`);
+  console.log(
+    `Checked ${entries.length} Apps against published MCP View packages.`,
+  );
 } finally {
   rmSync(temporaryDirectory, { recursive: true, force: true });
 }

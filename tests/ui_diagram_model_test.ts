@@ -261,7 +261,14 @@ Deno.test("Pan double-click preserves acknowledged selection from an earlier Sel
   const { createSelectionController } = await import(
     "../src/ui/shared/selection.ts"
   );
+  let commitClick!: () => void;
   const controller = createSelectionController({
+    gestureOptions: {
+      schedule: (run) => {
+        commitClick = run;
+        return () => {};
+      },
+    },
     rootId: "ec",
     updateModelContext: () => Promise.resolve({}),
   });
@@ -273,7 +280,8 @@ Deno.test("Pan double-click preserves acknowledged selection from an earlier Sel
   createDiagramGesture(controller, item, () => {
     opened++;
   }, "select").onClick({ detail: 1 });
-  await controller.setItems([], "add");
+  commitClick();
+  await controller.settled();
   assertEquals(
     controller.getSnapshot().items.map((item) => item.reference.id),
     ["A"],

@@ -5,6 +5,18 @@ import {
   type SelectionItem,
 } from "../src/ui/shared/selection.ts";
 import { createSelectionGesture } from "../src/ui/shared/selection-gesture.ts";
+/** New wire contract projects compact/reference items; these assertions decode only those tiers. */
+function wireItems(payload: SelectionContextPayload): SelectionItem[] {
+  return (payload.structuredContent!.items as Array<{
+    ref: SelectionItem["reference"];
+    label: string;
+    value?: string;
+  }>).map((item) => ({
+    reference: item.ref,
+    label: item.label,
+    ...(item.value ? { summary: item.value } : {}),
+  }));
+}
 const a: SelectionItem = {
   reference: { domain: "syson", kind: "element", id: "a" },
   label: "A",
@@ -47,7 +59,7 @@ Deno.test("selection only confirms ACKs and serializes full replacements", async
   await tick();
   assertEquals(calls.length, 2);
   assertEquals(c.getSnapshot().items, [a]);
-  assertEquals(calls[1].structuredContent.items, [a, b]);
+  assertEquals(wireItems(calls[1]), [a, b]);
   gates[1].resolve();
   await second;
   assertEquals(c.getSnapshot().items, [a, b]);
@@ -62,7 +74,7 @@ Deno.test("rejection is visible, unconfirmed, and retry resends refused intent",
   });
   await c.toggle(a);
   assertEquals(c.getSnapshot().items, []);
-  assertEquals(c.getSnapshot().desired, []);
+  assertEquals(c.getSnapshot().desired, [a]);
   assertEquals(c.getSnapshot().error, "refused");
   refuse = false;
   await c.retry();
@@ -86,12 +98,9 @@ Deno.test("old ACK cannot populate changed root; new clear waits for old request
   old.resolve();
   await reset;
   await c.settled();
-  assertEquals(calls.map((p) => p.structuredContent.rootId), [
-    "old",
-    "new",
-    "new",
-  ]);
-  assertEquals(calls[1].structuredContent.items, []);
+  assertEquals(calls.length, 3);
+  assertEquals(c.getSnapshot().rootId, "new");
+  assertEquals(wireItems(calls[1]), []);
   assertEquals(c.getSnapshot().items, [b]);
 });
 Deno.test("native double click compensates only its identity across rerenders", async () => {
@@ -203,12 +212,12 @@ Deno.test("remove, reconcile and clear replace the entire context including an e
   await c.toggle(a);
   await c.toggle(b);
   await c.remove(a);
-  assertEquals(calls.at(-1)?.structuredContent.items, [b]);
+  assertEquals(wireItems(calls.at(-1)!), [b]);
   await c.reconcile([a]);
   assertEquals(c.getSnapshot().items, []);
   await c.toggle(a);
   await c.clear();
-  assertEquals(calls.at(-1)?.structuredContent.items, []);
+  assertEquals(wireItems(calls.at(-1)!), []);
 });
 
 Deno.test("a later same-identity choice is not overwritten by double-click compensation", async () => {
@@ -254,7 +263,7 @@ Deno.test("bounded labels and summaries preserve semantic identity in the host p
     },
   });
   await c.toggle({ ...a, label: "L".repeat(900), summary: "S".repeat(4000) });
-  const sent = (payload.structuredContent.items as SelectionItem[])[0];
+  const sent = wireItems(payload)[0];
   assertEquals(sent.label.length, 256);
   assertEquals(sent.summary?.length, 1024);
   assertEquals(sent.reference, a.reference);
@@ -273,11 +282,11 @@ Deno.test("unsupported context hosts expose unavailable and root clear never pre
   assertEquals(c.getSnapshot().available, false);
   await c.toggle(a);
   assertEquals(c.getSnapshot().items, []);
-  assertEquals(c.getSnapshot().error, "Context updates are unavailable");
+  assertEquals(c.getSnapshot().error, undefined);
   await c.setRoot("two");
   assertEquals(c.getSnapshot().available, false);
   assertEquals(c.getSnapshot().pending, false);
-  assertEquals(c.getSnapshot().error, "Context updates are unavailable");
+  assertEquals(c.getSnapshot().error, undefined);
   assertEquals(calls, 0);
 });
 
@@ -298,7 +307,7 @@ Deno.test("fingerprint and semantic identity are preserved verbatim", async () =
   });
   await c.toggle({ reference, label: "Translated label" });
   assertEquals(
-    (payload.structuredContent.items as SelectionItem[])[0].reference,
+    wireItems(payload)[0].reference,
     reference,
   );
 });
@@ -324,7 +333,7 @@ Deno.test("batch add is one acknowledged snapshot, deduplicates canonical refs, 
   assertEquals(calls.length, 2);
   assertEquals(c.getSnapshot().items, [a]);
   assert(c.getSnapshot().pending);
-  assertEquals(calls[1].structuredContent.items, [a, bLatest]);
+  assertEquals(wireItems(calls[1]), [a, bLatest]);
   gate.resolve();
   await batch;
   assertEquals(c.getSnapshot().items, [a, bLatest]);
@@ -345,7 +354,7 @@ Deno.test("batch replace/remove each send a full snapshot and only confirm accep
   await c.setItems([a, a], "remove");
   assertEquals(c.getSnapshot().items, []);
   assertEquals(calls.length, 3);
-  assertEquals(calls[2].structuredContent.items, []);
+  assertEquals(wireItems(calls[2]), []);
 });
 
 Deno.test("a rejected batch exposes failure and retries the complete deduplicated intent", async () => {
@@ -359,7 +368,7 @@ Deno.test("a rejected batch exposes failure and retries the complete deduplicate
   fail = true;
   await c.setItems([b, b]);
   assertEquals(c.getSnapshot().items, [a]);
-  assertEquals(c.getSnapshot().desired, [a]);
+  assertEquals(c.getSnapshot().desired, [a, b]);
   assertEquals(c.getSnapshot().error, "batch rejected");
   fail = false;
   await c.retry();
@@ -383,7 +392,111 @@ Deno.test("an old-root batch ACK cannot restore old selections over the new-root
   gate.resolve();
   await c.settled();
   assertEquals(calls.length, 3);
-  assertEquals(calls[1].structuredContent.items, []);
+  assertEquals(wireItems(calls[1]), []);
   assertEquals(c.getSnapshot().rootId, "new");
   assertEquals(c.getSnapshot().items, [b]);
+});
+
+Deno.test("SysON policy graduates compact 1–3, references 4–8, one exact query above eight", async () => {
+  for (const count of [1, 3, 4, 8, 9, 50, 743]) {
+    let payload!: SelectionContextPayload;
+    const c = createSelectionController({
+      rootId: "package-root",
+      editingContextId: "editing-context",
+      updateModelContext: (next) => {
+        payload = next;
+        return Promise.resolve();
+      },
+    });
+    const items = Array.from({ length: count }, (_, index) => ({
+      reference: { domain: "sysml", kind: "element", id: `element-${index}` },
+      label: `Element ${index}`,
+      kind: "PartUsage",
+      owner: "Batmobile",
+      values: { length: 80, mass: 20, speed: 30, excluded: 99 },
+    }));
+    await c.setItems(items);
+    assertEquals(c.getSnapshot().error, undefined);
+    assertEquals(c.getSnapshot().items.length, count);
+    const wire = payload.structuredContent!.items as Array<
+      Record<string, unknown>
+    >;
+    assertEquals(wire.length, count > 8 ? 1 : count);
+    if (count <= 3) {
+      assertEquals(wire[0].fields, [
+        { label: "Kind", value: "PartUsage" },
+        { label: "Owner", value: "Batmobile" },
+        { label: "length", value: "80" },
+        { label: "mass", value: "20" },
+        { label: "speed", value: "30" },
+      ]);
+    } else if (count <= 8) {
+      assertEquals(wire[0].fields, undefined);
+      assertEquals(wire[0].value, "PartUsage");
+    } else {
+      assertEquals(wire[0].query, {
+        root: "package-root",
+        tool: "syson_query_eval",
+        arguments: {
+          editing_context_id: "editing-context",
+          expression: "aql:self",
+          selected_object_ids: items.map((item) => item.reference.id),
+        },
+      });
+    }
+    assertEquals(wire[0].metadata, undefined);
+    await c.dispose();
+  }
+});
+
+Deno.test("query transport negotiates text and scope changes update the explicit editing context", async () => {
+  const calls: SelectionContextPayload[] = [];
+  const c = createSelectionController({
+    rootId: "old-root",
+    editingContextId: "old-context",
+    hostCapabilities: { updateModelContext: { text: {} } },
+    updateModelContext: (payload) => {
+      calls.push(payload);
+      return Promise.resolve();
+    },
+  });
+  const many = Array.from({ length: 9 }, (_, index) => ({
+    reference: { domain: "sysml", kind: "element", id: `e${index}` },
+    label: `E${index}`,
+  }));
+  await c.setItems(many);
+  assertEquals(calls[0].structuredContent, undefined);
+  await c.configureScope("new-root", "new-context");
+  await c.setItems(many);
+  const snapshot = JSON.parse(
+    (calls.at(-1)!.content![0] as { text: string }).text,
+  );
+  assertEquals(snapshot.items[0].query.root, "new-root");
+  assertEquals(
+    snapshot.items[0].query.arguments.editing_context_id,
+    "new-context",
+  );
+  await c.dispose();
+});
+
+Deno.test("large selections refuse to fabricate editing context from the viewer root", async () => {
+  let writes = 0;
+  const c = createSelectionController({
+    rootId: "ui-only-root",
+    updateModelContext: () => {
+      writes++;
+      return Promise.resolve();
+    },
+  });
+  await c.setItems(Array.from({ length: 9 }, (_, index) => ({
+    reference: { domain: "sysml", kind: "element", id: String(index) },
+    label: String(index),
+  })));
+  assertEquals(writes, 0);
+  assertEquals(c.getSnapshot().items, []);
+  assertEquals(
+    c.getSnapshot().error,
+    "SysON editingContextId is required for query graduation",
+  );
+  await c.dispose();
 });

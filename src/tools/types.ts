@@ -4,7 +4,7 @@
  * @module lib/syson/tools/types
  */
 
-import type { MCPToolMeta, ToolAnnotations } from "@casys/mcp-server";
+import type { MCPToolMeta, ToolAnnotations } from "@mcpview/server";
 
 /** MCP Tool definition */
 export interface MCPTool {

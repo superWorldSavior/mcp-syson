@@ -1,6 +1,6 @@
 /** Composable constraint-validation components. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   Card,
@@ -16,7 +16,7 @@ import {
   SemanticElement,
   SemanticList,
   StateMessage,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import { useState } from "preact/hooks";
 import {
   defaultComponentSurface,

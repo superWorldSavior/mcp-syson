@@ -1,6 +1,6 @@
 /** Composable AQL/search result components. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Button,
   Card,
@@ -12,7 +12,7 @@ import {
   SemanticList,
   TextInput,
   Toolbar,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import { useMemo, useState } from "preact/hooks";
 import {
   defaultComponentSurface,

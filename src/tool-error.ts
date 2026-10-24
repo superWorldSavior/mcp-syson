@@ -1,6 +1,6 @@
 /** Domain-shaped MCP error results for SysON tool calls. */
 
-import type { ToolAnnotations } from "@casys/mcp-server";
+import type { ToolAnnotations } from "@mcpview/server";
 
 export interface SysonToolErrorBody {
   code: string;

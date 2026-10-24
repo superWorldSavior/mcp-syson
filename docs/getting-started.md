@@ -147,7 +147,7 @@ warning; read the project again before a model write.
 | `MCP_AUTH_RESOURCE_METADATA_URL` | no                | Public protected-resource metadata URL.                                                     |
 
 Authentication parsing and validation are owned by
-[`@casys/mcp-server`](https://github.com/Casys-AI/mcp-server). Keep credentials
+[`@mcpview/server`](https://github.com/Casys-AI/mcp-server). Keep credentials
 outside source control.
 
 ## Diagram renderer privacy

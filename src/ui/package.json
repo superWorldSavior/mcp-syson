@@ -9,14 +9,19 @@
     "dev": "vite"
   },
   "dependencies": {
-    "preact": "^10.28.2"
+    "preact": "^10.28.2",
+    "@mcpview/view": "0.11.0",
+    "@mcpview/components": "0.12.0",
+    "@mcpview/contracts": "0.2.0",
+    "zod": "^4.2.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
     "@preact/preset-vite": "^2.10.2",
     "typescript": "^5.3.0",
     "vite": "^6.2.0",
-    "vite-plugin-singlefile": "^2.0.3"
+    "vite-plugin-singlefile": "^2.0.3",
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/core": "^2.3.1"
   }
 }

@@ -1,6 +1,6 @@
 /** Composable value read/change components. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   Card,
@@ -10,7 +10,7 @@ import {
   ElementVerdict,
   SemanticElement,
   StateMessage,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import {
   defaultComponentSurface,
   sysmlRef,

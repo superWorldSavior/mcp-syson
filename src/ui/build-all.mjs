@@ -16,10 +16,8 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveSplitModules } from "./split-modules.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const split = resolveSplitModules();
 
 // Find all UI directories with index.html
 const skip = ["node_modules", "dist", "shared", "components"];
@@ -37,7 +35,6 @@ const uis = readdirSync(__dirname).filter((entry) => {
 });
 
 console.log(`\nBuilding ${uis.length} UIs: ${uis.join(", ")}\n`);
-console.log(`Audited local split: ${split.provenance}\n`);
 
 // Ensure dist directory exists
 mkdirSync(resolve(__dirname, "dist"), { recursive: true });
@@ -55,7 +52,6 @@ for (const ui of uis) {
         stdio: "inherit",
         env: {
           ...process.env,
-          ...split.environment,
           UI_NAME: ui,
         },
       },

@@ -4,12 +4,7 @@ import {
   selectionKey,
 } from "./selection.ts";
 
-const ledgers = new WeakMap<
-  SelectionController,
-  Map<string, { selected: boolean; revision: number }>
->();
-
-/** Share these handlers between HTML rows and SVG semantic nodes. Keep one instance per identity. */
+/** Shared library arbiter preserves provisional state across HTML/SVG rerenders. */
 export function createSelectionGesture(
   controller: SelectionController,
   item: SelectionItem,
@@ -18,12 +13,6 @@ export function createSelectionGesture(
 ) {
   const root = controller.getSnapshot().rootId;
   const scope = controller.scopeVersion();
-  let ledger = ledgers.get(controller);
-  if (!ledger) {
-    ledger = new Map();
-    ledgers.set(controller, ledger);
-  }
-  const key = JSON.stringify([scope, selectionKey(item)]);
   const valid = () =>
     controller.getSnapshot().rootId === root &&
     controller.scopeVersion() === scope;
@@ -35,37 +24,25 @@ export function createSelectionGesture(
       onOpenError?.(error);
     }
   };
+  const intent = {
+    key: selectionKey(item),
+    scope: JSON.stringify([root, scope]),
+    onPreview: () => controller.previewToggle(item),
+    onSingle: () => controller.toggle(item),
+    onDouble: open,
+  };
   return {
     onClick(event: { detail: number }) {
       if (!valid()) return;
-      if (event.detail >= 2 && openDetail) return;
-      const selected = controller.isDesired(item);
-      void controller.toggle(item);
-      ledger!.set(key, { selected, revision: controller.itemRevision(item) });
+      controller.clickIntents.click(intent, event.detail);
     },
     onDoubleClick() {
-      if (!valid() || !openDetail) return;
-      const firstClick = ledger!.get(key);
-      if (firstClick && controller.itemRevision(item) === firstClick.revision) {
-        void controller.setItem(item, firstClick.selected);
-      }
-      ledger!.delete(key);
-      open();
+      if (valid() && openDetail) controller.clickIntents.doubleClick(intent);
     },
     onKeyDown(
       event: { key: string; repeat?: boolean; preventDefault(): void },
     ) {
-      if (!valid() || event.repeat) return;
-      if (event.key === " ") {
-        event.preventDefault();
-        ledger!.delete(key);
-        void controller.toggle(item);
-      }
-      if (event.key === "Enter" && openDetail) {
-        event.preventDefault();
-        ledger!.delete(key);
-        open();
-      }
+      if (valid()) controller.clickIntents.keyDown(intent, event);
     },
   };
 }

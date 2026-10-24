@@ -5,7 +5,7 @@
  * authority layer or turn generic AQL into a read-only API.
  */
 
-import type { ToolAnnotations } from "@casys/mcp-server";
+import type { ToolAnnotations } from "@mcpview/server";
 import { constraintExtractOutputSchema } from "./constraint.ts";
 import type { SysonTool } from "./types.ts";
 

@@ -424,13 +424,37 @@ export const queryTools: SysonTool[] = [
     handler: async (
       { editing_context_id, expression, selected_object_ids },
     ) => {
+      const expr = expression as string;
+      const selectedIds = selected_object_ids as string[];
+      // SysON binds self to only the first selected object. An identity-set
+      // reproducer must resolve every identity explicitly rather than claiming
+      // the upstream scalar is the complete selection.
+      if (expr.trim() === "aql:self" && selectedIds.length > 1) {
+        const results: Array<{ id: string; kind: string; label: string }> = [];
+        for (const id of new Set(selectedIds)) {
+          const element = await getSelf(editing_context_id as string, id);
+          if (!element || element.id !== id) {
+            throw new Error(`Selected element could not be resolved: ${id}`);
+          }
+          results.push({
+            id: element.id,
+            kind: element.kind,
+            label: element.label,
+          });
+        }
+        return {
+          type: "objects",
+          expression: expr,
+          results,
+          count: results.length,
+        };
+      }
       const exprResult = await evalAql(
         editing_context_id as string,
-        expression as string,
-        selected_object_ids as string[],
+        expr,
+        selectedIds,
       );
 
-      const expr = expression as string;
       switch (exprResult.__typename) {
         case "ObjectExpressionResult":
           return {

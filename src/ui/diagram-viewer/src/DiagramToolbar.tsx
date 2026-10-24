@@ -1,4 +1,4 @@
-import { Button, Toolbar } from "@casys/mcp-view-components/preact/components";
+import { Button, Toolbar } from "@mcpview/components/preact/components";
 const paths = {
   select: "M4 3l15 10-7 1-4 7z",
   pan:

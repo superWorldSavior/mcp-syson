@@ -1,6 +1,6 @@
 /** Composable requirement coverage and trace components. */
 
-import { defineComponentRegistry } from "@casys/mcp-view-components";
+import { defineComponentRegistry } from "@mcpview/components";
 import {
   Badge,
   BadgeGroup,
@@ -20,7 +20,7 @@ import {
   SemanticList,
   StateMessage,
   Toolbar,
-} from "@casys/mcp-view-components/preact/components";
+} from "@mcpview/components/preact/components";
 import { useState } from "preact/hooks";
 import {
   defaultComponentSurface,
@@ -295,7 +295,7 @@ function TraceList(
                         digest,
                       )}
                       density="row"
-                      selected={snapshot.items.some((item) =>
+                      selected={snapshot.desired.some((item) =>
                         item.reference.id === trace.requirement.id
                       )}
                       tone={linked ? "info" : "warning"}

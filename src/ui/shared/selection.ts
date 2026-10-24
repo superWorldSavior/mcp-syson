@@ -1,4 +1,14 @@
-/** Serialized, acknowledged context basket. Presentation must use `items` for confirmed state. */
+/** SysON domain mapping; all ACK, queue, retry, batch and scope state belongs to mcpview. */
+import {
+  type ActiveContextHost,
+  type ActiveContextHostCapabilities,
+  type ClickIntentOptions,
+  type ContextSelectionItem,
+  createActiveContextController,
+  createActiveContextPolicy,
+  createClickIntentArbiter,
+} from "@mcpview/view/context";
+
 export interface SelectionReference {
   readonly domain: string;
   readonly kind: string;
@@ -9,6 +19,9 @@ export interface SelectionItem {
   readonly reference: SelectionReference;
   readonly label: string;
   readonly summary?: string;
+  readonly kind?: string;
+  readonly owner?: string;
+  readonly values?: Readonly<Record<string, string | number | boolean>>;
 }
 export interface SelectionSnapshot {
   readonly rootId: string;
@@ -18,10 +31,9 @@ export interface SelectionSnapshot {
   readonly pending: boolean;
   readonly error?: string;
 }
-export interface SelectionContextPayload {
-  readonly content: { type: "text"; text: string }[];
-  readonly structuredContent: Record<string, unknown>;
-}
+export type SelectionContextPayload = Parameters<
+  ActiveContextHost["updateModelContext"]
+>[0];
 export const selectionKey = (item: SelectionItem): string =>
   JSON.stringify([
     item.reference.domain,
@@ -29,175 +41,192 @@ export const selectionKey = (item: SelectionItem): string =>
     item.reference.id,
   ]);
 
+function toContext(item: SelectionItem): ContextSelectionItem {
+  return {
+    id: selectionKey(item),
+    view: "SysON elements",
+    reconcileKey: "elements",
+    label: item.label,
+    value: item.summary,
+    ref: { ...item.reference },
+    fields: [
+      { label: "Kind", value: item.kind ?? item.reference.kind },
+      ...(item.owner ? [{ label: "Owner", value: item.owner }] : []),
+      ...Object.entries(item.values ?? {}).slice(0, 3).map((
+        [label, value],
+      ) => ({ label, value: String(value) })),
+    ],
+    metadata: item,
+  };
+}
+function fromContext(item: ContextSelectionItem): SelectionItem {
+  return item.metadata as SelectionItem;
+}
+
 export function createSelectionController(options: {
   rootId: string;
+  /** Required for >8 items: rootId is a UI scope, not necessarily an editing context. */
+  editingContextId?: string;
+  /** Supply context.capabilities from the existing App hook for text-only hosts. */
+  hostCapabilities?: ActiveContextHostCapabilities;
   updateModelContext: (payload: SelectionContextPayload) => Promise<unknown>;
   enabled?: boolean;
   onConfirmed?: (items: readonly SelectionItem[]) => void;
+  /** Same arbitration instance survives row rerenders; default pointer delay is 500ms. */
+  gestureOptions?: ClickIntentOptions;
 }) {
   let rootId = options.rootId;
-  let epoch = 0;
-  let revision = 0;
-  let pending = 0;
-  let items: readonly SelectionItem[] = [];
-  let desired: readonly SelectionItem[] = [];
-  let error: string | undefined;
-  let failedIntent: readonly SelectionItem[] | undefined;
-  let queue = Promise.resolve();
-  const listeners = new Set<() => void>();
-  const revisions = new Map<string, number>();
-  let snapshot: SelectionSnapshot = {
-    rootId,
-    available: options.enabled !== false,
-    items,
-    desired,
-    pending: false,
-  };
-  const notify = () => {
-    snapshot = {
-      rootId,
-      available: options.enabled !== false,
-      items,
-      desired,
-      pending: pending > 0,
-      error,
-    };
-    for (const listener of listeners) listener();
-  };
-  function replace(next: readonly SelectionItem[]): Promise<void> {
-    desired = next;
-    const version = ++revision;
-    const generation = epoch;
-    const requestRoot = rootId;
-    pending++;
-    error = undefined;
-    notify();
-    const operation = queue.then(async () => {
-      // Superseded roots cannot overwrite the new root; its queued clear follows.
-      if (generation !== epoch) return;
-      try {
-        if (options.enabled === false) {
-          throw new Error("Context updates are unavailable");
-        }
-        const bounded = next.map((item) => ({
-          reference: { ...item.reference },
-          label: item.label.slice(0, 256),
-          ...(item.summary ? { summary: item.summary.slice(0, 1024) } : {}),
-        }));
-        const structuredContent = {
-          schema: "syson.context-selection.v1",
-          rootId: requestRoot,
-          items: bounded,
-        };
-        await options.updateModelContext({
-          content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-          structuredContent,
-        });
-        if (generation !== epoch) return;
-        items = next;
-        error = undefined;
-        failedIntent = undefined;
-        try {
-          options.onConfirmed?.(items);
-        } catch { /* Optional event routing cannot reject an ACK. */ }
-      } catch (cause) {
-        if (generation !== epoch) return;
-        error = cause instanceof Error ? cause.message : String(cause);
-        if (version === revision) {
-          failedIntent = next;
-          desired = items;
-        }
-      } finally {
-        if (generation === epoch) {
-          pending--;
-          notify();
-        }
+  let editingContextId = options.editingContextId;
+  const policy = createActiveContextPolicy({
+    schema: "syson.context-selection.v2",
+    version: 2,
+    maxItems: 1000,
+    compactUpTo: 3,
+    referenceUpTo: 8,
+    maxResourceBytes: 5 * 1024 * 1024,
+    maxTextFallbackBytes: 32 * 1024,
+    maxSnapshotBytes: 32 * 1024,
+    limits: {
+      id: 2048,
+      view: 120,
+      label: 256,
+      value: 1024,
+      fields: 5,
+      fieldLabel: 80,
+      fieldValue: 1024,
+      resourceUri: 2048,
+      resourceMimeType: 120,
+    },
+    reference(item) {
+      const entry = fromContext(item);
+      return { ...item, value: entry.kind ?? item.value };
+    },
+    query(items) {
+      if (!editingContextId) {
+        throw new TypeError(
+          "SysON editingContextId is required for query graduation",
+        );
       }
-    });
-    queue = operation.catch(() => {});
-    return operation;
-  }
-  function setItem(item: SelectionItem, selected: boolean): Promise<void> {
-    const key = selectionKey(item);
-    revisions.set(key, (revisions.get(key) ?? 0) + 1);
-    const others = desired.filter((entry) => selectionKey(entry) !== key);
-    return replace(selected ? [...others, item] : others);
-  }
-  const controller = {
-    getSnapshot: () => snapshot,
-    scopeVersion: () => epoch,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
+      const references = items.map((item) => fromContext(item).reference);
+      if (
+        references.some((ref) =>
+          !["syson", "sysml"].includes(ref.domain) ||
+          !["element", "Requirement", "RequirementUsage"].includes(ref.kind)
+        )
+      ) {
+        throw new TypeError(
+          "SysON query graduation requires element references",
+        );
+      }
+      const fingerprints = Object.fromEntries(
+        references
+          .filter((ref) => ref.basisFingerprint !== undefined)
+          .map((ref) => [ref.id, ref.basisFingerprint]),
+      );
+      return {
+        id: "selected-elements",
+        view: "SysON elements",
+        label: `${items.length} selected elements`,
+        query: {
+          root: rootId,
+          tool: "syson_query_eval",
+          arguments: {
+            editing_context_id: editingContextId,
+            expression: "aql:self",
+            selected_object_ids: [...new Set(references.map((ref) => ref.id))],
+          },
+          ...(Object.keys(fingerprints).length
+            ? { basisFingerprints: fingerprints }
+            : {}),
+        },
       };
     },
-    isSelected(item: SelectionItem) {
-      return items.some((entry) => selectionKey(entry) === selectionKey(item));
+  });
+  const core = createActiveContextController(
+    {
+      getHostCapabilities: () =>
+        options.enabled === false ? undefined : options.hostCapabilities ??
+          { updateModelContext: { structuredContent: {} } },
+      updateModelContext: options.updateModelContext,
     },
-    isDesired(item: SelectionItem) {
-      return desired.some((entry) =>
-        selectionKey(entry) === selectionKey(item)
-      );
+    rootId,
+    policy,
+  );
+  const actions = () => core.actionsForScope(rootId);
+  const clickIntents = createClickIntentArbiter(options.gestureOptions);
+  const getSnapshot = (): SelectionSnapshot => {
+    const snapshot = core.getSnapshot();
+    return {
+      rootId,
+      available: snapshot.supported,
+      items: snapshot.selections.map((selection) =>
+        fromContext(selection.item)
+      ),
+      desired: snapshot.desiredSelections.map((selection) =>
+        fromContext(selection.item)
+      ),
+      pending: snapshot.pending,
+      error: snapshot.error?.message,
+    };
+  };
+  async function finish(
+    operation: Promise<unknown> | undefined,
+  ): Promise<void> {
+    const result = await operation;
+    if (result === "shared" || result === "cleared" || result === "context") {
+      try {
+        options.onConfirmed?.(getSnapshot().items);
+      } catch { /* Event routing cannot reject an ACK. */ }
+    }
+  }
+  const controller = {
+    getSnapshot,
+    scopeVersion: () => core.scopeVersion(),
+    subscribe: core.subscribe,
+    clickIntents,
+    isSelected: (item: SelectionItem) => actions().isSelected(toContext(item)),
+    isDesired: (item: SelectionItem) => actions().isDesired(toContext(item)),
+    selectionState: (item: SelectionItem) =>
+      actions().selectionState(toContext(item)),
+    previewToggle(item: SelectionItem) {
+      const preview = actions().previewToggle(toContext(item));
+      return {
+        cancel: preview.cancel,
+        commit: () => finish(Promise.resolve(preview.commit())),
+      };
     },
-    itemRevision(item: SelectionItem) {
-      return revisions.get(selectionKey(item)) ?? 0;
-    },
-    toggle(item: SelectionItem) {
-      return setItem(item, !controller.isDesired(item));
-    },
-    setItem,
-    /** One rectangle/group gesture becomes one full context replacement. */
-    setItems(
+    itemRevision: (item: SelectionItem) =>
+      actions().itemRevision(toContext(item)),
+    toggle: (item: SelectionItem) => finish(actions().toggle(toContext(item))),
+    setItem: (item: SelectionItem, selected: boolean) =>
+      finish(actions().select([toContext(item)], selected ? "add" : "remove")),
+    setItems: (
       batch: readonly SelectionItem[],
       mode: "add" | "replace" | "remove" = "add",
-    ) {
-      const incoming = new Map(batch.map((item) => [selectionKey(item), item]));
-      const next = mode === "replace"
-        ? new Map<string, SelectionItem>()
-        : new Map(desired.map((item) => [selectionKey(item), item]));
-      const touched = new Set(incoming.keys());
-      if (mode === "replace") {
-        for (const item of desired) touched.add(selectionKey(item));
-      }
-      for (const [key, item] of incoming) {
-        if (mode === "remove") next.delete(key);
-        else next.set(key, item);
-      }
-      for (const key of touched) {
-        revisions.set(key, (revisions.get(key) ?? 0) + 1);
-      }
-      return replace([...next.values()]);
-    },
-    remove(item: SelectionItem) {
-      return setItem(item, false);
-    },
-    clear() {
-      for (const item of desired) {
-        revisions.set(selectionKey(item), controller.itemRevision(item) + 1);
-      }
-      return replace([]);
-    },
-    retry() {
-      return replace(failedIntent ?? desired);
-    },
+    ) => finish(actions().select(batch.map(toContext), mode)),
+    remove: (item: SelectionItem) =>
+      finish(actions().select([toContext(item)], "remove")),
+    clear: () => finish(actions().clear()),
+    retry: () => finish(core.retry()),
     setRoot(nextRoot: string) {
-      if (nextRoot === rootId) return Promise.resolve();
-      epoch++;
+      if (rootId === nextRoot) return Promise.resolve();
+      clickIntents.cancelAll();
       rootId = nextRoot;
-      pending = 0;
-      desired = [];
-      items = [];
-      revisions.clear();
-      failedIntent = undefined;
-      return replace([]);
+      core.setScope(nextRoot);
+      return finish(core.clearPreviousScope());
     },
-    /** Call only when absence is established, not for a paginated/filtered subset. */
-    reconcile(present: readonly SelectionItem[]) {
-      const keys = new Set(present.map(selectionKey));
-      return replace(desired.filter((item) => keys.has(selectionKey(item))));
+    reconcile: (present: readonly SelectionItem[]) =>
+      finish(actions().reconcileGroup("elements", present.map(toContext))),
+    settled: core.settled,
+    configureScope(nextRoot: string, nextEditingContextId?: string) {
+      editingContextId = nextEditingContextId;
+      return controller.setRoot(nextRoot);
     },
-    settled: () => queue,
+    core,
+    dispose() {
+      clickIntents.dispose();
+      return finish(core.dispose());
+    },
   };
   return controller;
 }

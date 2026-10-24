@@ -1,5 +1,5 @@
 import { assertEquals, assertMatch, assertRejects } from "@std/assert";
-import { MCP_APP_MIME_TYPE } from "@casys/mcp-server";
+import { MCP_APP_MIME_TYPE } from "@mcpview/server";
 import { registerUiResources } from "../server.ts";
 import { loadUiHtml, UI_RESOURCE_URIS, UI_RESOURCES } from "../src/ui/mod.ts";
 

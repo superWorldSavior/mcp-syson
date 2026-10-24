@@ -517,3 +517,67 @@ Deno.test("requirements trace keeps mixed resolved and unresolved links out of s
     restore();
   }
 });
+
+Deno.test("syson_query_eval - identity-set reproducer resolves every ID in stable deduplicated order", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const ids = Array.from({ length: 9 }, (_, index) => `selected-${index}`);
+  const restore = mockFetch(
+    ids.map((id) => ({
+      evaluateExpression: {
+        __typename: "EvaluateExpressionSuccessPayload",
+        result: {
+          __typename: "ObjectExpressionResult",
+          objValue: { id, kind: "sysml::PartUsage", label: id, iconURLs: [] },
+        },
+      },
+    })),
+    requests,
+  );
+  try {
+    const result = await getHandler("syson_query_eval")({
+      editing_context_id: "ec-selection",
+      expression: "aql:self",
+      selected_object_ids: [...ids, ids[0]],
+    }) as Record<string, unknown>;
+    assertEquals(result.type, "objects");
+    assertEquals(result.count, 9);
+    assertEquals(
+      (result.results as Array<{ id: string }>).map((item) => item.id),
+      ids,
+    );
+    assertEquals(
+      requests.map((request) =>
+        ((request.variables as Record<string, unknown>).input as Record<
+          string,
+          unknown
+        >).selectedObjectIds
+      ),
+      ids.map((id) => [id]),
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("syson_query_eval - identity-set reproducer rejects an unresolved member instead of returning a subset", async () => {
+  const restore = mockFetch([{
+    evaluateExpression: {
+      __typename: "EvaluateExpressionSuccessPayload",
+      result: { __typename: "VoidExpressionResult" },
+    },
+  }]);
+  try {
+    await assertRejects(
+      async () =>
+        await getHandler("syson_query_eval")({
+          editing_context_id: "ec-selection",
+          expression: "aql:self",
+          selected_object_ids: ["missing", "second"],
+        }),
+      Error,
+      "Selected element could not be resolved: missing",
+    );
+  } finally {
+    restore();
+  }
+});

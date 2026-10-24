@@ -99,7 +99,7 @@ deno task fmt
 deno task test
 ```
 
-Viewer development uses the audited local MCP View split and requires a rebuild
+Viewer development uses the published MCP View packages and requires a rebuild
 after source changes. The complete loop is documented in
 [MCP Apps and recorded viewer contracts](docs/mcp-apps.md#build-and-verify).
 

@@ -3,7 +3,7 @@
 import {
   VIEW_APP_MANIFEST_SCHEMA,
   VIEWER_SESSION_APPLY_ACTION,
-} from "@casys/mcp-view-contracts";
+} from "@mcpview/contracts";
 export const SYSON_VIEW_APP_MANIFEST_SCHEMA = VIEW_APP_MANIFEST_SCHEMA;
 export const SYSON_VIEWER_SESSION_ACTION = VIEWER_SESSION_APPLY_ACTION;
 

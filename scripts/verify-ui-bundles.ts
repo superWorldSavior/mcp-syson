@@ -18,9 +18,6 @@ const EXPECTED_VIEWERS = [
   "value-change-viewer",
 ];
 
-const EXPECTED_SPLIT_PROVENANCE =
-  "@casys/mcp-view@0.9.3 + @casys/mcp-view-contracts@0.1.0 + @casys/mcp-view-components@0.9.0";
-
 const VIEWER_SOURCE_PATHS = EXPECTED_VIEWERS.map((viewer) =>
   new URL(`../src/ui/${viewer}/src/main.tsx`, import.meta.url)
 );
@@ -64,13 +61,6 @@ for (const viewer of EXPECTED_VIEWERS) {
     throw new Error(`${viewer}: bundle is not a rendered MCP App document`);
   }
   if (
-    !bundledHtml.includes(
-      `name="casys-mcp-view-split" content="${EXPECTED_SPLIT_PROVENANCE}"`,
-    )
-  ) {
-    throw new Error(`${viewer}: bundle lacks exact local split provenance`);
-  }
-  if (
     bundledHtml.includes("file:///Volumes/") ||
     bundledHtml.includes("/Volumes/DEV/")
   ) {
@@ -101,11 +91,11 @@ for (const sourceUrl of VIEWER_SOURCE_PATHS) {
   if (
     !source.includes("defineComponentRegistry") ||
     !source.includes("startSysonViewerApp") ||
-    !source.includes('from "@casys/mcp-view-components"') ||
+    !source.includes('from "@mcpview/components"') ||
     !source.includes(
-      'from "@casys/mcp-view-components/preact/components"',
+      'from "@mcpview/components/preact/components"',
     ) ||
-    source.includes('from "@casys/mcp-view/preact"')
+    source.includes('from "@mcpview/view/preact"')
   ) {
     throw new Error(
       `${sourceUrl.pathname}: viewer presentation must use the optional split component package.`,
@@ -142,10 +132,10 @@ const adapterSource = await Deno.readTextFile(
   new URL("../src/ui/shared/preact-surface.tsx", import.meta.url),
 );
 if (
-  !adapterSource.includes('from "@casys/mcp-view"') ||
-  !adapterSource.includes('from "@casys/mcp-view-components"') ||
-  !adapterSource.includes('from "@casys/mcp-view-components/preact"') ||
-  !adapterSource.includes('from "@casys/mcp-view-components/fonts"') ||
+  !adapterSource.includes('from "@mcpview/view"') ||
+  !adapterSource.includes('from "@mcpview/components"') ||
+  !adapterSource.includes('from "@mcpview/components/preact"') ||
+  !adapterSource.includes('from "@mcpview/components/fonts"') ||
   !adapterSource.includes("startPreactSurfaceApp(") ||
   !adapterSource.includes("viewerSession:") ||
   !adapterSource.includes("toState") ||
@@ -167,7 +157,7 @@ if (
   adapterSource.includes("createMcpApp") ||
   adapterSource.includes("mountComponentSurface") ||
   adapterSource.includes("createComposeEventClient") ||
-  adapterSource.includes('from "@casys/mcp-view/preact"') ||
+  adapterSource.includes('from "@mcpview/view/preact"') ||
   adapterSource.includes("defineRecordedPreactComponent")
 ) {
   throw new Error(
@@ -183,35 +173,25 @@ const packageJson = JSON.parse(
 const packageLock = await Deno.readTextFile(
   new URL("../src/ui/package-lock.json", import.meta.url),
 );
-const splitResolver = await Deno.readTextFile(
-  new URL("../src/ui/split-modules.mjs", import.meta.url),
-);
-const workflow = await Deno.readTextFile(
-  new URL("../.github/workflows/publish.yml", import.meta.url),
-);
-if (
-  packageJson.dependencies?.["@casys/mcp-view"] !== undefined ||
-  packageJson.dependencies?.["@casys/mcp-view-components"] !== undefined ||
-  packageJson.devDependencies?.["@modelcontextprotocol/ext-apps"] !==
-    "^1.7.4" ||
-  packageJson.devDependencies?.["@modelcontextprotocol/sdk"] !== "^1.29.0" ||
-  packageLock.includes('"node_modules/@casys/mcp-view"') ||
-  packageLock.includes('"node_modules/@casys/mcp-view-components"') ||
-  splitResolver.includes("@casys/mcp-view@0.7") ||
-  !splitResolver.includes('version: "0.9.0"') ||
-  splitResolver.includes('version: "0.8.0"') ||
-  !/requiredFileModule\(\s*"MCP_VIEW_MODULE"/.test(splitResolver) ||
-  !/requiredFileModule\(\s*"MCP_VIEW_COMPONENTS_MODULE"/.test(
-    splitResolver,
-  ) ||
-  !workflow.includes("ref: b08802df353bb25d25a1c8d64b22ea61b5287ae0") ||
-  workflow.includes("f9cb8493edfd555c58b9fc6f5601fe444fc78046") ||
-  workflow.includes("59eeb37") ||
-  workflow.includes("342c1b7456c011d3f21cad988f9dde23bcbecae0")
+for (
+  const [name, version] of Object.entries({
+    "@mcpview/view": "0.11.0",
+    "@mcpview/components": "0.12.0",
+    "@mcpview/contracts": "0.2.0",
+  })
 ) {
-  throw new Error(
-    "SysON UI must require the audited local split without an npm or 0.7 fallback.",
-  );
+  if (
+    packageJson.dependencies?.[name] !== version ||
+    !packageLock.includes(`"node_modules/${name}"`)
+  ) {
+    throw new Error(`UI must use published ${name}@${version}.`);
+  }
+}
+if (
+  packageLock.includes("@casys/mcp-view") ||
+  packageLock.includes("@modelcontextprotocol/sdk")
+) {
+  throw new Error("UI must not retain legacy MCP View or SDK v1 packages.");
 }
 
 const globalCss = await Deno.readTextFile(

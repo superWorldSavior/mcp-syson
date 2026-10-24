@@ -1,34 +1,29 @@
+/** App-scoped ownership; state and subscription lifecycle belong to MCP View. */
 import {
   defineSemanticSelection,
   emitSemanticSelection,
-} from "@casys/mcp-view";
-import type { ResultData } from "@casys/mcp-view";
-import { useEffect, useState } from "preact/hooks";
+  type ResultData,
+} from "@mcpview/view";
+import { useActiveContext } from "@mcpview/components/preact/context";
 import type { SurfaceAppContext } from "./preact-surface.tsx";
 import {
   createSelectionController,
   type SelectionController,
 } from "./selection.ts";
 
-// The kit remounts surfaces on locale/navigation changes. App identity outlives them.
 const baskets = new WeakMap<object, SelectionController>();
 export function getSysonSelection<T extends ResultData>(
   context: SurfaceAppContext<T>,
   rootId: string,
+  editingContextId?: string,
 ): SelectionController {
   let controller = baskets.get(context.app);
   if (!controller) {
-    const modalities = context.capabilities.updateModelContext;
     controller = createSelectionController({
       rootId,
-      enabled: Boolean(modalities?.text || modalities?.structuredContent),
-      updateModelContext: (payload) =>
-        context.app.updateModelContext({
-          ...(modalities?.text ? { content: payload.content } : {}),
-          ...(modalities?.structuredContent
-            ? { structuredContent: payload.structuredContent }
-            : {}),
-        }),
+      editingContextId,
+      hostCapabilities: context.capabilities,
+      updateModelContext: (payload) => context.app.updateModelContext(payload),
       onConfirmed: (items) => {
         emitSemanticSelection(
           context,
@@ -41,22 +36,20 @@ export function getSysonSelection<T extends ResultData>(
     });
     baskets.set(context.app, controller);
   }
+  void controller.configureScope(rootId, editingContextId);
   return controller;
 }
 
 export function useSysonSelection<T extends ResultData>(
   context: SurfaceAppContext<T>,
   rootId: string,
+  editingContextId?: string,
 ) {
-  const controller = getSysonSelection(context, rootId);
-  const [snapshot, setSnapshot] = useState(controller.getSnapshot());
-  useEffect(() => {
-    const unsubscribe = controller.subscribe(() =>
-      setSnapshot(controller.getSnapshot())
-    );
+  const controller = getSysonSelection(context, rootId, editingContextId);
+  // Invalidate pending pointer intents before the shared hook changes scope.
+  if (controller.getSnapshot().rootId !== rootId) {
     void controller.setRoot(rootId);
-    setSnapshot(controller.getSnapshot());
-    return unsubscribe;
-  }, [controller, rootId]);
-  return { controller, snapshot };
+  }
+  useActiveContext(controller.core, rootId);
+  return { controller, snapshot: controller.getSnapshot() };
 }
