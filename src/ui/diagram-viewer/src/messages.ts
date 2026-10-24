@@ -26,6 +26,19 @@ export const DIAGRAM_MESSAGES_EN = {
   diagramView: "Diagram view",
   elementKind: "Kind",
   openedFrom: "In {view}",
+  layout: "Layout",
+  layoutSyson: "SysON",
+  layoutAuto: "Auto",
+  layoutRunning: "Computing the automatic layout…",
+  layoutFailed: "Automatic layout unavailable; showing the SysON layout.",
+  layoutSysonFact: "SysON positions",
+  layoutAutoFact: "Automatic (ELK, {ms} ms)",
+  drawing: "Drawing",
+  drawingViewer: "Drawn by the viewer from the diagram data",
+  drawingServer: "Server SVG",
+  itemsOne: "1 item",
+  itemsMany: "{count} items",
+  moreRows: "+{count} more",
 } as const;
 
 export type DiagramMessageKey = keyof typeof DIAGRAM_MESSAGES_EN;
@@ -58,6 +71,20 @@ export const DIAGRAM_MESSAGES_FR: Readonly<Record<DiagramMessageKey, string>> =
     diagramView: "Vue du diagramme",
     elementKind: "Genre",
     openedFrom: "Dans {view}",
+    layout: "Disposition",
+    layoutSyson: "SysON",
+    layoutAuto: "Auto",
+    layoutRunning: "Calcul de la disposition automatique…",
+    layoutFailed:
+      "Disposition automatique indisponible ; disposition SysON affichée.",
+    layoutSysonFact: "Positions SysON",
+    layoutAutoFact: "Automatique (ELK, {ms} ms)",
+    drawing: "Tracé",
+    drawingViewer: "Tracé par la visionneuse depuis les données du diagramme",
+    drawingServer: "SVG du serveur",
+    itemsOne: "1 élément",
+    itemsMany: "{count} éléments",
+    moreRows: "+{count} de plus",
   };
 
 export const diagramViewerMessages = createTranslator({

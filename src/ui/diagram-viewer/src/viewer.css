@@ -203,8 +203,9 @@
 .syson-diagram-stage g[tabindex]:focus-visible {
   outline: none;
 }
-.syson-diagram-stage g[data-context-state="selected"] > :is(rect, ellipse, circle, polygon, path, line, polyline),
-.syson-diagram-stage g[data-context-state="adding"] > :is(rect, ellipse, circle, polygon, path, line, polyline) {
+/* Server SVG fallback only; the client drawing styles its own states. */
+.syson-diagram-stage:not([data-drawing="client"]) g[data-context-state="selected"] > :is(rect, ellipse, circle, polygon, path, line, polyline),
+.syson-diagram-stage:not([data-drawing="client"]) g[data-context-state="adding"] > :is(rect, ellipse, circle, polygon, path, line, polyline) {
   stroke: var(--mcp-view-accent);
 }
 
@@ -324,4 +325,303 @@
 .syson-diagram-detail:focus-visible {
   outline: 2px solid var(--mcp-view-accent);
   outline-offset: 2px;
+}
+
+/* ── Layout choice in the "⋯" menu ──────────────────────────────────────── */
+.syson-menu-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px 6px 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--mcp-view-border);
+}
+.syson-menu-choice-label {
+  color: var(--mcp-view-muted);
+  font-size: var(--mcp-view-size-note);
+}
+.syson-menu-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius-control, 5px);
+  background: var(--mcp-view-subtle);
+}
+.syson-menu-segment {
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: calc(var(--mcp-view-radius-control, 5px) - 1px);
+  background: transparent;
+  color: var(--mcp-view-text-secondary);
+  font: inherit;
+  font-size: var(--mcp-view-size-note);
+  cursor: pointer;
+}
+.syson-menu-segment[aria-checked="true"] {
+  background: var(--mcp-view-panel);
+  color: var(--mcp-view-accent-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--mcp-view-text) 14%,
+    transparent);
+}
+.syson-menu-segment:hover {
+  color: var(--mcp-view-text);
+}
+.syson-menu-segment:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 1px;
+}
+
+/* ── Canvas: a quiet dot grid (syson-diagram-design.md §2) ──────────────── */
+.syson-diagram-viewer .syson-diagram-canvas {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--mcp-view-border-strong) 45%, transparent) 1.1px,
+    transparent 1.4px
+  );
+  background-size: 24px 24px;
+  background-position: 12px 12px;
+}
+/* Re-rasterize text after a zoom instead of scaling a cached bitmap. */
+.syson-diagram-viewer .syson-diagram-stage[data-drawing="client"] {
+  will-change: auto;
+}
+.syson-diagram-layout-status {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 2;
+  max-width: calc(100% - 20px);
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: 999px;
+  background: var(--mcp-view-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--mcp-view-text) 8%,
+    transparent);
+  color: var(--mcp-view-muted);
+  font-size: var(--mcp-view-size-note);
+  pointer-events: none;
+}
+.syson-diagram-layout-status[data-state="running"]::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: 7px;
+  border-radius: 50%;
+  background: var(--mcp-view-accent);
+  animation: syson-diagram-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes syson-diagram-pulse {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Client drawing: tokens and family tones only ───────────────────────── */
+.syson-diagram-svg {
+  display: block;
+  overflow: visible;
+  font-family: var(--mcp-view-font-body);
+  --syson-edge: color-mix(in srgb, var(--mcp-view-muted) 62%, transparent);
+}
+.syson-diagram-svg text {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.syson-block-layer {
+  --tone: var(--mcp-view-muted);
+}
+.syson-block-layer[data-kind-tone="structure"] {
+  --tone: var(--mcp-view-accent);
+}
+.syson-block-layer[data-kind-tone="interface"] {
+  --tone: var(--mcp-view-brand);
+}
+.syson-block-layer[data-kind-tone="behavior"] {
+  --tone: var(--mcp-view-success);
+}
+.syson-block-layer[data-kind-tone="requirement"] {
+  --tone: var(--mcp-view-warning);
+}
+.syson-block-shadow {
+  fill: color-mix(in srgb, var(--mcp-view-text) 7%, transparent);
+  transition: transform 0.12s ease, fill 0.12s ease;
+}
+.syson-block-card {
+  fill: var(--mcp-view-panel);
+  stroke: color-mix(in srgb, var(--mcp-view-border-strong) 85%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-block-accent {
+  fill: var(--tone);
+}
+.syson-block-tint {
+  fill: color-mix(in srgb, var(--tone) 15%, var(--mcp-view-panel));
+  stroke: color-mix(in srgb, var(--tone) 55%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-block-layer[data-hover] .syson-block-shadow {
+  fill: color-mix(in srgb, var(--mcp-view-text) 14%, transparent);
+  transform: translateY(2px);
+}
+.syson-block-layer[data-hover] .syson-block-card,
+.syson-block-layer[data-hover] .syson-block-tint {
+  stroke: color-mix(in srgb, var(--tone) 70%, var(--mcp-view-border-strong));
+}
+.syson-block[data-context-state="selected"] :is(.syson-block-card, .syson-block-tint),
+.syson-block[data-context-state="adding"] :is(.syson-block-card, .syson-block-tint) {
+  stroke: var(--mcp-view-accent);
+}
+.syson-block[data-context-state="adding"] :is(.syson-block-card, .syson-block-tint) {
+  stroke-dasharray: 5 3;
+}
+.syson-block[data-context-state="removing"] :is(.syson-block-card, .syson-block-tint) {
+  stroke: var(--mcp-view-quiet);
+  stroke-dasharray: 5 3;
+}
+.syson-pill-box {
+  fill: color-mix(in srgb, var(--tone) 11%, var(--mcp-view-panel));
+  stroke: color-mix(in srgb, var(--tone) 40%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-block-layer[data-definition="true"] .syson-pill-box {
+  fill: var(--mcp-view-panel);
+  stroke: color-mix(in srgb, var(--tone) 70%, transparent);
+}
+.syson-pill-text {
+  fill: var(--tone);
+  font-family: var(--mcp-view-font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.syson-block-layer[data-kind-tone="neutral"] .syson-pill-text {
+  fill: var(--mcp-view-muted);
+}
+.syson-block-name {
+  fill: var(--mcp-view-text);
+  font-weight: 600;
+}
+.syson-block-qualifier,
+.syson-block-hint,
+.syson-row-more {
+  fill: var(--mcp-view-quiet);
+}
+.syson-section-rule {
+  stroke: var(--mcp-view-border);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-section-title {
+  fill: var(--mcp-view-muted);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.syson-row-hit {
+  fill: transparent;
+}
+.syson-row:hover .syson-row-hit {
+  fill: var(--mcp-view-subtle);
+}
+.syson-row[data-context-state="selected"] .syson-row-hit,
+.syson-row[data-context-state="adding"] .syson-row-hit {
+  fill: color-mix(in srgb, var(--mcp-view-accent) 12%, transparent);
+}
+.syson-row-text {
+  fill: var(--mcp-view-text-secondary);
+}
+.syson-port-box {
+  fill: var(--mcp-view-brand);
+  stroke: var(--mcp-view-panel);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-port-label {
+  fill: var(--mcp-view-muted);
+}
+.syson-control {
+  fill: var(--mcp-view-panel);
+  stroke: var(--mcp-view-text-secondary);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-control[data-fill="solid"] {
+  fill: var(--mcp-view-text-secondary);
+}
+.syson-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+}
+.syson-edge-line {
+  fill: none;
+  stroke: var(--syson-edge);
+  stroke-width: 1.25px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.syson-edge-line[data-dashed] {
+  stroke-dasharray: 5 4;
+}
+.syson-edge-marker {
+  stroke: var(--syson-edge);
+  stroke-width: 1.25px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.syson-edge-marker[data-fill="line"] {
+  fill: var(--syson-edge);
+}
+.syson-edge-marker[data-fill="panel"] {
+  fill: var(--mcp-view-panel);
+}
+.syson-edge-marker[data-fill="none"] {
+  fill: none;
+}
+.syson-edge[data-hot],
+.syson-edge:hover,
+.syson-edge[data-context-state="selected"],
+.syson-edge[data-context-state="adding"] {
+  --syson-edge: var(--mcp-view-accent);
+}
+.syson-edge[data-hot] .syson-edge-line,
+.syson-edge:hover .syson-edge-line,
+.syson-edge[data-context-state="selected"] .syson-edge-line {
+  stroke-width: 2px;
+}
+.syson-edge-label rect {
+  fill: var(--mcp-view-panel);
+  stroke: var(--mcp-view-border);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-edge-label text {
+  fill: var(--mcp-view-muted);
+}
+/* Port labels stay readable where an edge passes behind them. */
+.syson-port-label {
+  paint-order: stroke;
+  stroke: var(--mcp-view-panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+/* Edges show focus in the drawing (no screen box around a long route). */
+.syson-edge:focus-visible {
+  --syson-edge: var(--mcp-view-accent);
+}
+.syson-edge:focus-visible .syson-edge-line {
+  stroke-width: 2.5px;
 }

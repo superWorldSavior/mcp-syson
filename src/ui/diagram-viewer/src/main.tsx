@@ -86,6 +86,24 @@ import {
   zoomDiagram,
 } from "./diagram-model";
 import { sanitizeDiagramSvg } from "./sanitize-svg";
+import { DiagramSvg, type DiagramSvgLabels } from "./DiagramSvg";
+import {
+  buildDiagramModel,
+  clientRenderable,
+  type DiagramLayoutMode,
+  type DiagramModel,
+  type DiagramScene,
+  levelOfDetail,
+  preferredBlockSize,
+  sceneEntries,
+  type SnapshotEdge,
+  type SnapshotNode,
+  sysonScene,
+  type TextMeasure,
+} from "./diagram-scene";
+import { elkGraph, type ElkNode, sceneFromElk } from "./diagram-elk";
+import { type ElkEngineKind, runElkLayout } from "./elk-runner";
+import { useTextMeasure } from "./text-measure";
 import "../../global.css";
 import "./viewer.css";
 
@@ -99,6 +117,123 @@ interface DiagramNode {
   outsideLabels?: string[];
   sourceId?: string;
   targetId?: string;
+}
+
+/** Layout choice and the last ELK answer, per diagram, for the App session. */
+interface RetainedLayout {
+  mode: DiagramLayoutMode;
+  auto?: {
+    readonly key: string;
+    readonly graph: ElkNode;
+    readonly ms: number;
+    readonly engine: ElkEngineKind;
+  };
+}
+const retainedLayouts = new WeakMap<object, Map<string, RetainedLayout>>();
+function retainedLayout(app: object, diagramId: string): RetainedLayout {
+  let diagrams = retainedLayouts.get(app);
+  if (!diagrams) {
+    diagrams = new Map();
+    retainedLayouts.set(app, diagrams);
+  }
+  let entry = diagrams.get(diagramId);
+  if (!entry) {
+    entry = { mode: "syson" };
+    diagrams.set(diagramId, entry);
+  }
+  return entry;
+}
+
+type AutoLayoutState =
+  | { readonly status: "running"; readonly key: string }
+  | { readonly status: "failed"; readonly key: string }
+  | {
+    readonly status: "done";
+    readonly key: string;
+    readonly scene: DiagramScene;
+    readonly ms: number;
+    readonly engine: ElkEngineKind;
+  };
+
+/**
+ * Auto layout (syson-diagram-design.md §4): ELK is loaded and run only once
+ * « Auto » is chosen; the SysON layout stays on screen until the answer
+ * arrives, and a failure falls back to it with a quiet status line.
+ */
+function useAutoLayout(
+  app: object,
+  diagramId: string,
+  model: DiagramModel | undefined,
+  measure: TextMeasure,
+) {
+  const retained = retainedLayout(app, diagramId);
+  const [mode, setModeState] = useState<DiagramLayoutMode>(retained.mode);
+  useEffect(() => {
+    setModeState(retainedLayout(app, diagramId).mode);
+  }, [app, diagramId]);
+  const setMode = (next: DiagramLayoutMode) => {
+    retainedLayout(app, diagramId).mode = next;
+    setModeState(next);
+  };
+  const [state, setState] = useState<AutoLayoutState>();
+  const input = useMemo(() => {
+    if (!model || mode !== "auto") return undefined;
+    const sizes = new Map(
+      model.blocks.map((
+        block,
+      ) => [block.id, preferredBlockSize(block, measure)]),
+    );
+    const graph = elkGraph(model, sizes, measure);
+    return { graph, key: JSON.stringify(graph) };
+  }, [model, measure, mode]);
+  useEffect(() => {
+    if (!input || !model) return;
+    const entry = retainedLayout(app, diagramId);
+    const settle = (
+      run: { graph: ElkNode; ms: number; engine: ElkEngineKind },
+    ) => {
+      const scene = sceneFromElk(model, run.graph, measure);
+      entry.auto = { key: input.key, ...run };
+      setState({ status: "done", key: input.key, scene, ...run });
+    };
+    if (entry.auto?.key === input.key) {
+      try {
+        settle(entry.auto);
+        return;
+      } catch {
+        entry.auto = undefined;
+      }
+    }
+    let current = true;
+    setState({ status: "running", key: input.key });
+    void runElkLayout(input.graph).then((run) => {
+      if (current) settle(run);
+    }).catch((error) => {
+      if (!current) return;
+      console.warn("[diagram-viewer] Auto layout failed", error);
+      setState({ status: "failed", key: input.key });
+      setMode("syson");
+    });
+    return () => {
+      current = false;
+    };
+  }, [input]);
+  const scene = mode === "auto" && state?.status === "done" &&
+      state.key === input?.key
+    ? state.scene
+    : undefined;
+  return {
+    mode,
+    setMode: (next: DiagramLayoutMode) => {
+      if (next === "auto" && state?.status === "failed") setState(undefined);
+      setMode(next);
+    },
+    scene,
+    running: mode === "auto" && state?.status === "running",
+    failed: mode === "syson" && state?.status === "failed",
+    ms: state?.status === "done" ? state.ms : undefined,
+    engine: state?.status === "done" ? state.engine : undefined,
+  };
 }
 
 interface DiagramSnapshot extends Record<string, unknown> {
@@ -658,9 +793,10 @@ function ViewsPanel(
 
 /** « Rendering details », moved from a disclosure above the canvas. */
 function RenderingPanel(
-  { data, context }: {
+  { data, context, drawing }: {
     data: DiagramSnapshot;
     context: SurfaceAppContext<DiagramSnapshot>;
+    drawing?: { mode: DiagramLayoutMode; ms?: number };
   },
 ) {
   const t = sysonMessages(context.hostContext.locale);
@@ -671,6 +807,20 @@ function RenderingPanel(
       <KeyValueList
         layout="facts"
         items={[
+          {
+            id: "drawing",
+            label: m("drawing"),
+            value: drawing ? m("drawingViewer") : m("drawingServer"),
+          },
+          ...(drawing
+            ? [{
+              id: "layout",
+              label: m("layout"),
+              value: drawing.mode === "auto" && drawing.ms !== undefined
+                ? m("layoutAutoFact", { ms: Math.round(drawing.ms) })
+                : m("layoutSysonFact"),
+            }]
+            : []),
           {
             id: "renderer",
             label: t("renderer"),
@@ -825,12 +975,57 @@ function Visual(
   );
   const membersRef = useRef(members);
   membersRef.current = members;
+  // The viewer draws from the structured nodes (syson-diagram-design.md §1);
+  // the sanitized server SVG stays the fallback for what it cannot draw.
+  const measureText = useTextMeasure();
+  const drawable = useMemo(() => clientRenderable(data), [
+    data.nodes,
+    data.edges,
+  ]);
+  const model = useMemo(
+    () =>
+      drawable
+        ? buildDiagramModel(
+          data.nodes as SnapshotNode[],
+          (data.edges ?? []) as SnapshotEdge[],
+        )
+        : undefined,
+    [drawable, data.nodes, data.edges],
+  );
+  const sysonLayout = useMemo(
+    () => model ? sysonScene(model, measureText) : undefined,
+    [model, measureText],
+  );
+  const auto = useAutoLayout(
+    context.app,
+    data.diagramId,
+    model,
+    measureText,
+  );
+  const scene = auto.scene ?? sysonLayout;
+  const sceneShape = useMemo<DiagramGeometry | undefined>(
+    () =>
+      scene
+        ? {
+          bounds: { x: 0, y: 0, width: scene.width, height: scene.height },
+          entries: sceneEntries(scene),
+        }
+        : undefined,
+    [scene],
+  );
+  const sceneShapeRef = useRef(sceneShape);
+  sceneShapeRef.current = sceneShape;
   // Admission is pure per SVG and identity table: never re-parse on pan frames.
   const admitted = useMemo(
-    () => data.svg ? sanitizeDiagramSvg(data.svg, members, []) : undefined,
-    [data.svg, members],
+    () =>
+      !drawable && data.svg
+        ? sanitizeDiagramSvg(data.svg, members, [])
+        : undefined,
+    [drawable, data.svg, members],
   );
   const markup = admitted?.status === "available" ? admitted.markup : undefined;
+  /** What the stage draws: the client scene, else the admitted server SVG. */
+  const surface: DiagramScene | string | undefined = scene ?? markup;
 
   const apply = useCallback((next: DiagramTransform) => {
     setScale(next.scale);
@@ -842,25 +1037,48 @@ function Visual(
       ? { width: container.clientWidth, height: container.clientHeight }
       : undefined;
   };
+  /**
+   * Frame below the floating toolbar so the first row of blocks is never
+   * hidden under it (the toolbar keeps the canvas top-left corner).
+   */
+  const belowToolbar = (
+    size: { width: number; height: number },
+    frame: (area: { width: number; height: number }) => DiagramTransform,
+  ): DiagramTransform => {
+    const tools = containerRef.current?.querySelector<HTMLElement>(
+      ".syson-diagram-floating-tools",
+    );
+    const inset = tools
+      ? Math.max(0, tools.offsetTop + tools.offsetHeight - 16)
+      : 0;
+    if (!inset || size.height - inset < 160) return frame(size);
+    const next = frame({ width: size.width, height: size.height - inset });
+    return { ...next, y: next.y + inset };
+  };
   /** Explicit Fit (button, 0, F): always the whole diagram. */
   const fit = useCallback(() => {
     const shape = geometryRef.current, size = canvasViewport();
     if (!shape || !size) return;
     viewMode.current = "fit";
-    apply(fitDiagram(shape.bounds, size));
+    apply(belowToolbar(size, (area) => fitDiagram(shape.bounds, area)));
   }, [apply]);
   /** Opening view: fit, or the legibility floor on the first primary block. */
   const showOpening = useCallback(() => {
     const shape = geometryRef.current, size = canvasViewport();
     if (!shape || !size) return;
     viewMode.current = "open";
-    apply(openingDiagramView(shape.bounds, size, openingFocus(shape.entries)));
+    apply(
+      belowToolbar(
+        size,
+        (area) =>
+          openingDiagramView(shape.bounds, area, openingFocus(shape.entries)),
+      ),
+    );
   }, [apply]);
   const measure = useCallback(() => {
     const container = containerRef.current;
-    const next = container
-      ? measureDiagram(container, membersRef.current)
-      : undefined;
+    const next = sceneShapeRef.current ??
+      (container ? measureDiagram(container, membersRef.current) : undefined);
     geometryRef.current = next;
     setGeometry(next);
     return next;
@@ -870,7 +1088,7 @@ function Visual(
     geometryRef.current = undefined;
     setGeometry(undefined);
     const container = containerRef.current;
-    if (!container || !markup) return;
+    if (!container || !surface) return;
     if (measure()) showOpening();
     const observer = new ResizeObserver(() => {
       const size = {
@@ -890,7 +1108,7 @@ function Visual(
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [markup, measure, showOpening, fit]);
+  }, [surface, measure, showOpening, fit]);
 
   const { controller, snapshot } = useSysonSelection(
     context,
@@ -990,7 +1208,7 @@ function Visual(
     if (!node) return;
     node.addEventListener("wheel", handleWheel, { passive: false });
     return () => node.removeEventListener("wheel", handleWheel);
-  }, [handleWheel, markup]);
+  }, [handleWheel, surface]);
 
   // Kit context states: confirmed solid, pending intent dashed.
   const states = new Map<string, DiagramContextState>();
@@ -1009,9 +1227,10 @@ function Visual(
   );
   const selectedHere = [...desiredIds].filter((id) => presentIds.has(id))
     .length;
+  // The client drawing renders these states itself; this patches the server SVG.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !markup) return;
     const groups = container.querySelectorAll<SVGGElement>(
       "g[data-node-id],g[data-edge-id]",
     );
@@ -1026,10 +1245,20 @@ function Visual(
   const zoomToSelection = () => {
     const shape = geometryRef.current, size = canvasViewport();
     if (!shape || !size) return;
+    const selected = shape.entries.filter((entry) =>
+      desiredIds.has(entry.targetId)
+    );
+    // An edge often stands for its owner block (same semantic element):
+    // frame that block, not the edge's whole route.
+    const shapes = new Set(
+      selected.filter((entry) => entry.kind !== undefined).map((entry) =>
+        entry.targetId
+      ),
+    );
     const region = unionDiagramRects(
-      shape.entries.filter((entry) => desiredIds.has(entry.targetId)).map((
-        entry,
-      ) => entry.rect),
+      selected.filter((entry) =>
+        entry.kind !== undefined || !shapes.has(entry.targetId)
+      ).map((entry) => entry.rect),
     );
     const next = region && frameDiagramRegion(region, size);
     if (!next) return;
@@ -1050,11 +1279,21 @@ function Visual(
       height,
     };
   };
+  // Level of detail (§3): rows below full detail, ports in tint, are not drawn.
+  const lod = scene ? levelOfDetail(scale) : "full";
+  // Edges show their selection in the drawing (accent stroke), not as a box.
+  const drawn = (entry: { kind?: string }) =>
+    !scene ||
+    (entry.kind === "compartment"
+      ? lod === "full"
+      : entry.kind === "port"
+      ? lod !== "tint"
+      : entry.kind !== undefined);
   // Screen-space outlines keep a 3px width whatever the zoom.
   const selectionBoxes = geometry
     ? geometry.entries.flatMap((entry) => {
       const state = states.get(entry.targetId);
-      if (!state) return [];
+      if (!state || !drawn(entry)) return [];
       const box = overlay(entry.rect);
       return !canvasSize.width || rectsIntersect(box, visible)
         ? [{ id: entry.id, state, box }]
@@ -1064,7 +1303,16 @@ function Visual(
   const focused = focusedId
     ? geometry?.entries.find((entry) => entry.id === focusedId)
     : undefined;
-  const focusBox = focused && overlay(focused.rect);
+  const focusBox = focused && drawn(focused) && overlay(focused.rect);
+  const memberLabels = useMemo(
+    () => new Map(members.map((member) => [member.id, member.label])),
+    [members],
+  );
+  const svgLabels = useMemo<DiagramSvgLabels>(() => ({
+    items: (count) => count === 1 ? m("itemsOne") : m("itemsMany", { count }),
+    more: (count) => m("moreRows", { count }),
+    member: (id) => memberLabels.get(id),
+  }), [locale, memberLabels]);
   const blocks = useMemo(
     () => geometry?.entries.filter((entry) => entry.kind === "node") ?? [],
     [geometry],
@@ -1091,6 +1339,17 @@ function Visual(
         <ViewMenu
           label={m("moreOptions")}
           triggerRef={menuTrigger}
+          choice={model
+            ? {
+              label: m("layout"),
+              value: auto.mode,
+              options: [
+                { id: "syson", label: m("layoutSyson") },
+                { id: "auto", label: m("layoutAuto") },
+              ],
+              onChange: (id) => auto.setMode(id as DiagramLayoutMode),
+            }
+            : undefined}
           items={[
             { id: "views", label: m("browseViews") },
             { id: "rendering", label: m("renderingDetails") },
@@ -1131,11 +1390,19 @@ function Visual(
             }}
           />
         )
-        : <RenderingPanel data={data} context={context} />}
+        : (
+          <RenderingPanel
+            data={data}
+            context={context}
+            drawing={scene
+              ? { mode: scene.mode, ms: auto.scene ? auto.ms : undefined }
+              : undefined}
+          />
+        )}
     </DiagramPanel>
   );
 
-  if (!data.svg || !admitted) {
+  if (!scene && (!data.svg || !admitted)) {
     return (
       <section className="syson-viewer syson-diagram-viewer">
         {header}
@@ -1146,7 +1413,7 @@ function Visual(
       </section>
     );
   }
-  if (admitted.status === "unavailable") {
+  if (!scene && admitted?.status === "unavailable") {
     return (
       <section className="syson-viewer syson-diagram-viewer">
         {header}
@@ -1177,6 +1444,11 @@ function Visual(
         style={canvasHeight ? { height: `${canvasHeight}px` } : undefined}
         role="group"
         tabIndex={0}
+        data-layout={scene?.mode}
+        data-layout-ms={auto.scene && auto.ms !== undefined
+          ? Math.round(auto.ms)
+          : undefined}
+        data-layout-engine={auto.scene ? auto.engine : undefined}
         onDragStart={(event) => event.preventDefault()}
         onScroll={(event) => {
           // Focusing an off-screen element scrolls the clipped canvas; turn
@@ -1449,16 +1721,51 @@ function Visual(
             }}
           />
         )}
-        <div
-          className="syson-diagram-stage"
-          style={{
-            transform:
-              `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
-            transformOrigin: "0 0",
-            transition: "none",
-          }}
-          dangerouslySetInnerHTML={{ __html: admitted.markup }}
-        />
+        {scene
+          ? (
+            <div
+              className="syson-diagram-stage"
+              data-drawing="client"
+              style={{
+                transform:
+                  `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                transformOrigin: "0 0",
+                transition: "none",
+              }}
+            >
+              <DiagramSvg
+                scene={scene}
+                detail={lod}
+                scale={scale}
+                states={states}
+                desired={desiredIds}
+                stateKey={`${stateKey}#${[...desiredIds].join(",")}`}
+                measure={measureText}
+                labels={svgLabels}
+              />
+            </div>
+          )
+          : (
+            <div
+              className="syson-diagram-stage"
+              style={{
+                transform:
+                  `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                transformOrigin: "0 0",
+                transition: "none",
+              }}
+              dangerouslySetInnerHTML={{ __html: markup ?? "" }}
+            />
+          )}
+        {(auto.running || auto.failed) && (
+          <p
+            className="syson-diagram-layout-status"
+            role="status"
+            data-state={auto.running ? "running" : "failed"}
+          >
+            {auto.running ? m("layoutRunning") : m("layoutFailed")}
+          </p>
+        )}
         <div className="syson-diagram-overlay" aria-hidden="true">
           {selectionBoxes.map(({ id, state, box }) => (
             <div

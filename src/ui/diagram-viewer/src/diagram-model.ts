@@ -428,6 +428,23 @@ export function dragCrossedThreshold(
   return previous || isDrag(start, current);
 }
 
+/**
+ * One semantic element, whatever the spelling: SysON may send a compartment's
+ * target as `sirius:///<resource>#<id>` while its block says `<id>`.
+ */
+export function sameDiagramElement(a?: string, b?: string): boolean {
+  const key = (value?: string) => {
+    const id = value?.trim();
+    if (!id) return undefined;
+    const hash = id.lastIndexOf("#");
+    return hash >= 0 && /^[a-z][a-z0-9+.-]*:/i.test(id)
+      ? id.slice(hash + 1)
+      : id;
+  };
+  const left = key(a);
+  return left !== undefined && left === key(b);
+}
+
 export function selectableDiagramMembers<T extends DiagramMember>(
   nodes: readonly T[],
   edges: readonly T[] = [],
@@ -437,7 +454,7 @@ export function selectableDiagramMembers<T extends DiagramMember>(
     if (!member.targetObjectId?.trim()) return false;
     const parent = member.parentId ? byId.get(member.parentId) : undefined;
     return !(member.kind === "compartment" && parent &&
-      member.targetObjectId === parent.targetObjectId);
+      sameDiagramElement(member.targetObjectId, parent.targetObjectId));
   });
 }
 export function uniqueSemanticMembers<T extends DiagramMember>(
@@ -499,7 +516,7 @@ export function readableDiagramMembers(
       visited.add(node.id);
       const parent = node.parentId ? byId.get(node.parentId) : undefined;
       const decorative = node.kind === "compartment" && parent &&
-        node.targetObjectId === parent.targetObjectId;
+        sameDiagramElement(node.targetObjectId, parent.targetObjectId);
       const label = authored(node);
       if (label && !decorative) parts.unshift(label);
       node = parent;

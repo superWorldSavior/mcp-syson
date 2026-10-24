@@ -2,6 +2,8 @@
  * Header overflow menu ("⋯"), WAI-ARIA menu button pattern: the trigger
  * declares `aria-haspopup`, arrows move between items, Escape closes and
  * returns focus to the trigger, an outside press closes without moving it.
+ * An optional `choice` renders first as a segmented group of
+ * `menuitemradio` entries (the Layout control).
  */
 import type { RefObject } from "preact";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
@@ -11,12 +13,20 @@ export interface ViewMenuItem {
   readonly label: string;
 }
 
+export interface ViewMenuChoice {
+  readonly label: string;
+  readonly value: string;
+  readonly options: readonly ViewMenuItem[];
+  readonly onChange: (id: string) => void;
+}
+
 export function ViewMenu(
-  { label, items, onSelect, triggerRef }: {
+  { label, items, onSelect, triggerRef, choice }: {
     readonly label: string;
     readonly items: readonly ViewMenuItem[];
     readonly onSelect: (id: string) => void;
     readonly triggerRef?: RefObject<HTMLButtonElement>;
+    readonly choice?: ViewMenuChoice;
   },
 ) {
   const [open, setOpen] = useState<false | "first" | "last">(false);
@@ -28,7 +38,7 @@ export function ViewMenu(
 
   const entries = () => [
     ...(listRef.current?.querySelectorAll<HTMLButtonElement>(
-      "[role='menuitem']",
+      "[role='menuitem'],[role='menuitemradio']",
     ) ?? []),
   ];
   const close = (returnFocus: boolean) => {
@@ -114,6 +124,38 @@ export function ViewMenu(
             } else if (event.key === "Tab") setOpen(false);
           }}
         >
+          {choice && (
+            <div
+              className="syson-menu-choice"
+              role="group"
+              aria-label={choice.label}
+            >
+              <span className="syson-menu-choice-label" aria-hidden="true">
+                {choice.label}
+              </span>
+              <span className="syson-menu-segmented">
+                {choice.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={option.id === choice.value ? "true" : "false"}
+                    tabIndex={-1}
+                    className="syson-menu-segment"
+                    onClick={() => {
+                      setOpen(false);
+                      trigger.current?.focus();
+                      if (option.id !== choice.value) {
+                        choice.onChange(option.id);
+                      }
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </span>
+            </div>
+          )}
           {items.map((item) => (
             <button
               key={item.id}
