@@ -51,6 +51,7 @@ export {
   modelTools,
   projectTools,
   queryTools,
+  requirementsTools,
   valueTools,
 } from "./src/tools/mod.ts";
 

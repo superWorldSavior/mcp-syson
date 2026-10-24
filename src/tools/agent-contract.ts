@@ -1,3 +1,4 @@
+import { viewerIdentitySchema, viewerMetadataSchema } from "../viewer-data.ts";
 /**
  * MCP-facing contracts that make the SysON provider predictable for an agent.
  *
@@ -240,6 +241,7 @@ const valueReadOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    ...viewerMetadataSchema,
     element_id: { type: "string" },
     value: { type: "number" },
     literal_id: { type: "string" },
@@ -253,6 +255,7 @@ const valueSetOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    ...viewerMetadataSchema,
     element_id: { type: "string" },
     old_value: { type: "number" },
     new_value: { type: "number" },
@@ -276,6 +279,7 @@ const searchOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    ...viewerMetadataSchema,
     query: { type: "string" },
     results: {
       type: "array",
@@ -300,6 +304,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "object" },
         expression: { type: "string" },
         result: identitySchema,
@@ -310,6 +315,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "objects" },
         expression: { type: "string" },
         results: { type: "array", items: identitySchema },
@@ -321,6 +327,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "string" },
         expression: { type: "string" },
         result: { type: "string" },
@@ -331,6 +338,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "boolean" },
         expression: { type: "string" },
         result: { type: "boolean" },
@@ -341,6 +349,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "int" },
         expression: { type: "string" },
         result: { type: "integer" },
@@ -351,6 +360,7 @@ const queryEvalOutputSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...viewerMetadataSchema,
         type: { const: "void" },
         expression: { type: "string" },
         result: { type: "null" },
@@ -365,6 +375,7 @@ const requirementsTraceOutputSchema = {
   additionalProperties: false,
   $defs: constraintExtractOutputSchema.$defs,
   properties: {
+    ...viewerMetadataSchema,
     authoredConstraintsStatus: {
       enum: ["available", "unavailable", "not-requested"],
     },
@@ -399,6 +410,13 @@ const requirementsTraceOutputSchema = {
             },
           },
           satisfiedBy: { type: "array", items: identitySchema },
+          verifiedBy: { type: "array", items: identitySchema },
+          verificationStatus: { enum: ["unknown", "available"] },
+          authoredConstraintsStatus: {
+            enum: ["available", "unavailable", "not-requested"],
+          },
+          authoredConstraintsError: { type: "string" },
+          authoredConstraints: constraintExtractOutputSchema,
           error: { type: "string" },
         },
         required: ["requirement", "satisfiedBy"],
@@ -418,6 +436,69 @@ const requirementsTraceOutputSchema = {
     error: { type: "string" },
   },
   required: ["rootId", "requirementsCount", "traces", "coverage"],
+};
+
+const requirementsListOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  $defs: constraintExtractOutputSchema.$defs,
+  properties: {
+    ...viewerMetadataSchema,
+    kind: { const: "live-requirements" },
+    rootId: { type: "string" },
+    target: viewerIdentitySchema,
+    count: { type: "integer", minimum: 0 },
+    requirements: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          kind: { type: "string" },
+          text: { type: "string" },
+          textStatus: { enum: ["available", "unavailable"] },
+          identifier: { type: "string" },
+          identifierStatus: { enum: ["available", "unavailable"] },
+          metric: { type: "string" },
+          operator: { type: "string" },
+          limit: {
+            type: "object",
+            additionalProperties: false,
+            properties: { value: { type: "number" }, unit: { type: "string" } },
+            required: ["value", "unit"],
+          },
+          coverageStatus: { const: "unknown" },
+          authoredConstraintsStatus: {
+            enum: ["available", "unavailable", "not-requested"],
+          },
+          authoredConstraints: constraintExtractOutputSchema,
+          authoredConstraintsError: { type: "string" },
+          owner: viewerIdentitySchema,
+          path: { type: "array", items: viewerIdentitySchema },
+        },
+        required: [
+          "id",
+          "name",
+          "kind",
+          "textStatus",
+          "identifierStatus",
+          "coverageStatus",
+          "authoredConstraintsStatus",
+        ],
+      },
+    },
+  },
+  required: [
+    "kind",
+    "rootId",
+    "editingContextId",
+    "scope",
+    "target",
+    "requirements",
+    "count",
+  ],
 };
 
 const descriptionSchema = {
@@ -695,6 +776,10 @@ const CONTRACTS: Record<string, AgentToolContract> = {
   syson_query_requirements_trace: {
     annotations: readOnly,
     outputSchema: requirementsTraceOutputSchema,
+  },
+  syson_requirements_list: {
+    annotations: readOnly,
+    outputSchema: requirementsListOutputSchema,
   },
   syson_part_structure: { annotations: readOnly },
 

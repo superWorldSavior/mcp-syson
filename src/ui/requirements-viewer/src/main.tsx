@@ -30,8 +30,8 @@ import {
 } from "../../shared/preact-surface";
 import {
   adaptRequirementsRecordedContent,
-  isRequirementsCaptureReadModel,
-  type RequirementsCaptureReadModel,
+  isRequirementsViewData,
+  type RequirementsViewData,
 } from "../../shared/recorded-content";
 import { SelectionBasket } from "../../shared/SelectionBasket";
 import { useSysonSelection } from "../../shared/selection-hooks";
@@ -50,13 +50,17 @@ function operatorGlyph(operator: string): string {
 
 function AuthoredList(
   { data, context }: {
-    data: RequirementsCaptureReadModel;
-    context: SurfaceAppContext<RequirementsCaptureReadModel>;
+    data: RequirementsViewData;
+    context: SurfaceAppContext<RequirementsViewData>;
   },
 ) {
   const t = sysonMessages(context.hostContext.locale);
   const digest = recordedProjectionDigest(context);
-  const { controller, snapshot } = useSysonSelection(context, data.rootId);
+  const { controller, snapshot } = useSysonSelection(
+    context,
+    data.rootId,
+    data.editingContextId,
+  );
   return (
     <>
       <CollectionCard
@@ -84,8 +88,10 @@ function AuthoredList(
                 const item = {
                   reference: sysmlRef("Requirement", requirement.id, digest),
                   label: requirement.name,
-                  summary:
-                    `${requirement.metric} ${requirement.operator} ${requirement.limit.value} ${requirement.limit.unit}`,
+                  summary: requirement.limit
+                    ? `${requirement.metric} ${requirement.operator} ${requirement.limit.value} ${requirement.limit.unit}`
+                    : requirement.text,
+                  kind: requirement.kind ?? "Requirement",
                 };
                 const gesture = createSelectionGesture(controller, item);
                 return (
@@ -119,18 +125,20 @@ function AuthoredList(
                           detail={requirement.metric}
                         />
                       }
-                      reading={
-                        <ElementLimit
-                          label={t("authoredLimit")}
-                          operator={operatorGlyph(requirement.operator)}
-                          value={formatHostNumber(
-                            requirement.limit.value,
-                            context.hostContext.locale,
-                            { maximumSignificantDigits: 21 },
-                          )}
-                          unit={requirement.limit.unit}
-                        />
-                      }
+                      reading={requirement.limit && requirement.operator
+                        ? (
+                          <ElementLimit
+                            label={t("authoredLimit")}
+                            operator={operatorGlyph(requirement.operator)}
+                            value={formatHostNumber(
+                              requirement.limit.value,
+                              context.hostContext.locale,
+                              { maximumSignificantDigits: 21 },
+                            )}
+                            unit={requirement.limit.unit}
+                          />
+                        )
+                        : undefined}
                     />
                   </div>
                 );
@@ -150,15 +158,17 @@ function AuthoredList(
                       id: "metric",
                       label: t("authoredLimit"),
                       render: (requirement) =>
-                        `${requirement.metric} ${
-                          operatorGlyph(requirement.operator)
-                        } ${
-                          formatHostNumber(
-                            requirement.limit.value,
-                            context.hostContext.locale,
-                            { maximumSignificantDigits: 21 },
-                          )
-                        } ${requirement.limit.unit}`,
+                        requirement.limit && requirement.operator
+                          ? `${requirement.metric} ${
+                            operatorGlyph(requirement.operator)
+                          } ${
+                            formatHostNumber(
+                              requirement.limit.value,
+                              context.hostContext.locale,
+                              { maximumSignificantDigits: 21 },
+                            )
+                          } ${requirement.limit.unit}`
+                          : requirement.text ?? "",
                     },
                     {
                       id: "id",
@@ -183,8 +193,8 @@ function AuthoredList(
 
 const keys = VIEWER_COMPONENT_KEYS.requirements;
 const registry = defineComponentRegistry<
-  SysonViewData<RequirementsCaptureReadModel>,
-  SurfaceAppContext<RequirementsCaptureReadModel>
+  SysonViewData<RequirementsViewData>,
+  SurfaceAppContext<RequirementsViewData>
 >({
   components: {
     [keys[0]]: definePreactComponent(
@@ -205,7 +215,7 @@ void startSysonViewerApp({
   registry,
   recordedSession: {
     view: "requirements",
-    validateContent: isRequirementsCaptureReadModel,
+    validateContent: isRequirementsViewData,
     adaptContent: adaptRequirementsRecordedContent,
   },
   loadingLabel: surfaceLabel("loadingRequirements"),

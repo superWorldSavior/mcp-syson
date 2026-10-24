@@ -8,6 +8,11 @@
  */
 
 import type { SysonTool } from "./types.ts";
+import type {
+  AuthoredConstraints,
+  RequirementsTraceData,
+  RequirementTraceEntry,
+} from "../viewer-data.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { SEARCH_ELEMENTS } from "../api/queries.ts";
 import { evalAql, getChildren, getSelf } from "./aql.ts";
@@ -383,6 +388,8 @@ export const queryTools: SysonTool[] = [
         iconURLs: m.iconURLs ?? [],
       }));
       return {
+        editingContextId: editing_context_id,
+        scope: { kind: "selection", editingContextId: editing_context_id },
         query: text,
         results,
         count: results.length,
@@ -426,6 +433,14 @@ export const queryTools: SysonTool[] = [
     ) => {
       const expr = expression as string;
       const selectedIds = selected_object_ids as string[];
+      const metadata = {
+        editingContextId: editing_context_id,
+        scope: {
+          kind: "selection",
+          editingContextId: editing_context_id,
+          selectedObjectIds: [...new Set(selectedIds)],
+        },
+      };
       // SysON binds self to only the first selected object. An identity-set
       // reproducer must resolve every identity explicitly rather than claiming
       // the upstream scalar is the complete selection.
@@ -443,6 +458,7 @@ export const queryTools: SysonTool[] = [
           });
         }
         return {
+          ...metadata,
           type: "objects",
           expression: expr,
           results,
@@ -458,6 +474,7 @@ export const queryTools: SysonTool[] = [
       switch (exprResult.__typename) {
         case "ObjectExpressionResult":
           return {
+            ...metadata,
             type: "object",
             expression: expr,
             result: {
@@ -468,6 +485,7 @@ export const queryTools: SysonTool[] = [
           };
         case "ObjectsExpressionResult":
           return {
+            ...metadata,
             type: "objects",
             expression: expr,
             results: exprResult.objsValue.map((o) => ({
@@ -479,20 +497,27 @@ export const queryTools: SysonTool[] = [
           };
         case "StringExpressionResult":
           return {
+            ...metadata,
             type: "string",
             expression: expr,
             result: exprResult.strValue,
           };
         case "BooleanExpressionResult":
           return {
+            ...metadata,
             type: "boolean",
             expression: expr,
             result: exprResult.boolValue,
           };
         case "IntExpressionResult":
-          return { type: "int", expression: expr, result: exprResult.intValue };
+          return {
+            ...metadata,
+            type: "int",
+            expression: expr,
+            result: exprResult.intValue,
+          };
         case "VoidExpressionResult":
-          return { type: "void", expression: expr, result: null };
+          return { ...metadata, type: "void", expression: expr, result: null };
       }
     },
   },
@@ -525,7 +550,9 @@ export const queryTools: SysonTool[] = [
         emits: ["syson.requirement.selected"],
       },
     },
-    handler: async ({ editing_context_id, root_id }) => {
+    handler: async (
+      { editing_context_id, root_id },
+    ): Promise<RequirementsTraceData> => {
       const ecId = editing_context_id as string;
       const rootId = root_id as string;
 
@@ -538,6 +565,8 @@ export const queryTools: SysonTool[] = [
 
       if (reqResult.__typename !== "ObjectsExpressionResult") {
         return {
+          editingContextId: ecId,
+          scope: { kind: "element", editingContextId: ecId, rootId },
           rootId,
           requirementsCount: 0,
           traces: [],
@@ -648,7 +677,7 @@ export const queryTools: SysonTool[] = [
           error instanceof Error ? error.message : String(error)
         }`;
       }
-      const traces = requirements.map((requirement) => {
+      const traces = requirements.map<RequirementTraceEntry>((requirement) => {
         const satisfactionLinks = linksByRequirement.get(requirement.id) ?? [];
         const satisfiedBy = [
           ...new Map(
@@ -663,6 +692,7 @@ export const queryTools: SysonTool[] = [
         const error = discoveryError ?? unresolved?.error;
         return {
           requirement: { id: requirement.id, label: requirement.label },
+          verificationStatus: "unknown",
           satisfiedBy,
           satisfactionLinks,
           ...(error ? { error } : {}),
@@ -674,7 +704,7 @@ export const queryTools: SysonTool[] = [
       const extract = constraintTools.find((tool) =>
         tool.name === "syson_constraint_extract"
       )!;
-      const enrichedTraces = [];
+      const enrichedTraces: RequirementTraceEntry[] = [];
       for (const [index, trace] of traces.entries()) {
         if (index >= 10) {
           enrichedTraces.push({
@@ -687,7 +717,7 @@ export const queryTools: SysonTool[] = [
           const authoredConstraints = await extract.handler({
             editing_context_id: ecId,
             element_id: trace.requirement.id,
-          });
+          }) as AuthoredConstraints;
           enrichedTraces.push({
             ...trace,
             authoredConstraintsStatus: "available",
@@ -714,6 +744,8 @@ export const queryTools: SysonTool[] = [
       const unsatisfied = total - satisfied;
 
       return {
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId },
         rootId,
         requirementsCount: total,
         traces: enrichedTraces,

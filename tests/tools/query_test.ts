@@ -232,6 +232,8 @@ Deno.test("requirements trace keeps closed zero coverage on an unexpected result
       root_id: "root-1",
     }) as Record<string, unknown>;
     assertEquals(result, {
+      editingContextId: "ec-1",
+      scope: { kind: "element", editingContextId: "ec-1", rootId: "root-1" },
       rootId: "root-1",
       requirementsCount: 0,
       traces: [],

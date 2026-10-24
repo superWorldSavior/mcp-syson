@@ -4,12 +4,17 @@
  * @module lib/syson/src/tools/mod
  */
 
-export type { SysonTool, SysonToolCategory, SysonToolHandler } from "./types.ts";
+export type {
+  SysonTool,
+  SysonToolCategory,
+  SysonToolHandler,
+} from "./types.ts";
 
 // Tool categories
 export { projectTools } from "./project.ts";
 export { modelTools } from "./model.ts";
 export { elementTools } from "./element.ts";
+export { requirementsTools } from "./requirements.ts";
 export { queryTools } from "./query.ts";
 export { diagramTools } from "./diagram.ts";
 export { constraintTools } from "./constraint.ts";
@@ -30,6 +35,7 @@ export type { ExprResult } from "./aql.ts";
 import { projectTools } from "./project.ts";
 import { modelTools } from "./model.ts";
 import { elementTools } from "./element.ts";
+import { requirementsTools } from "./requirements.ts";
 import { queryTools } from "./query.ts";
 import { diagramTools } from "./diagram.ts";
 import { constraintTools } from "./constraint.ts";
@@ -42,6 +48,7 @@ export const allTools: SysonTool[] = [
   ...modelTools,
   ...elementTools,
   ...queryTools,
+  ...requirementsTools,
   ...diagramTools,
   ...constraintTools,
   ...valueTools,
@@ -52,7 +59,7 @@ export const toolsByCategory: Record<string, SysonTool[]> = {
   project: projectTools,
   model: modelTools,
   element: elementTools,
-  query: queryTools,
+  query: [...queryTools, ...requirementsTools],
   diagram: diagramTools,
   constraint: constraintTools,
   value: valueTools,

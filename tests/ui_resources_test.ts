@@ -24,6 +24,10 @@ Deno.test("ships all SysON viewer bundles as readable UI resources", async () =>
   }
 
   assertEquals(
+    UI_RESOURCES["ui://mcp-syson/requirements-viewer"].tools,
+    ["syson_requirements_list"],
+  );
+  assertEquals(
     UI_RESOURCES["ui://mcp-syson/model-explorer-viewer"].tools,
     ["syson_element_children"],
   );

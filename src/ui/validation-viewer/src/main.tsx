@@ -37,39 +37,15 @@ import {
   sysonMessages,
   type SysonViewData,
 } from "../../shared/preact-surface";
-import { isValidationReport } from "../../shared/recorded-content";
+import {
+  isValidationReport,
+  type ValidationReport,
+} from "../../shared/recorded-content";
 import "../../global.css";
 
-interface ConstraintResult {
-  constraintId: string;
-  constraintName: string;
-  status: "pass" | "fail" | "error" | "unresolved";
-  expression?: string;
-  computedValue?: number;
-  threshold?: number;
-  margin?: number;
-  marginPercent?: number;
-  error?: string;
-  unresolvedRefs?: string[];
-}
-interface ValidationSummary {
-  total: number;
-  pass: number;
-  fail: number;
-  error: number;
-  unresolved: number;
-}
-interface ValidationReport extends Record<string, unknown> {
-  editingContextId: string;
-  elementId: string;
-  elementName: string;
-  constraints: ConstraintResult[];
-  summary: ValidationSummary;
-  resolvedValues?: Record<string, number | { value: number; unit?: string }>;
-  validatedAt: string;
-}
-
-type ValidationViewStatus = ConstraintResult["status"] | "empty";
+type ValidationViewStatus =
+  | ValidationReport["constraints"][number]["status"]
+  | "empty";
 
 function statusTone(
   status: ValidationViewStatus,

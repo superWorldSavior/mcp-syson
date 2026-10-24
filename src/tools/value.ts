@@ -126,6 +126,8 @@ export const valueTools: SysonTool[] = [
       }
 
       return {
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId: elementId },
         element_id: elementId,
         value: current.value,
         literal_id: current.literalId,
@@ -221,6 +223,8 @@ export const valueTools: SysonTool[] = [
       }
 
       return {
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId: elementId },
         element_id: elementId,
         old_value: current.value,
         new_value: newValue,

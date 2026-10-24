@@ -1,3 +1,8 @@
+import {
+  validationDiagnostics,
+  validationDiagnosticSchema,
+  viewerScopeSchema,
+} from "../viewer-data.ts";
 /**
  * SysON Constraint Tools
  *
@@ -382,6 +387,8 @@ export const constraintValidateOutputSchema = {
     elementId: { type: "string" },
     elementName: { type: "string" },
     constraints: { type: "array", items: constraintResultOutputSchema },
+    scope: viewerScopeSchema,
+    diagnostics: { type: "array", items: validationDiagnosticSchema },
     summary: constraintSummaryOutputSchema,
     resolvedValues: {
       type: "object",
@@ -622,7 +629,9 @@ export const constraintTools: SysonTool[] = [
         editingContextId: ecId,
         elementId,
         elementName,
+        scope: { kind: "element", editingContextId: ecId, rootId: elementId },
         constraints: allResults,
+        diagnostics: validationDiagnostics(allResults, elementId, elementName),
         summary: summarise(allResults),
         resolvedValues: valuesToJson(values),
         validatedAt: new Date().toISOString(),

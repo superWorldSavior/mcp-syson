@@ -40,49 +40,15 @@ import {
   sysonMessages,
   type SysonViewData,
 } from "../../shared/preact-surface";
-import { isRequirementsTrace } from "../../shared/recorded-content";
+import {
+  isRequirementsTrace,
+  type RequirementsTraceData as TraceData,
+} from "../../shared/recorded-content";
 import { SelectionBasket } from "../../shared/SelectionBasket";
 import { useSysonSelection } from "../../shared/selection-hooks";
 import { createSelectionGesture } from "../../shared/selection-gesture";
-import {
-  type RequirementExpression,
-  requirementExpressionText,
-} from "./requirement-expression";
+import { requirementExpressionText } from "./requirement-expression";
 import "../../global.css";
-
-interface TraceEntry {
-  requirement: { id: string; label: string };
-  satisfiedBy: Array<{ id: string; label: string; kind: string }>;
-  error?: string;
-  satisfactionLinks?: Array<{
-    relationship: { id: string; label: string; kind: string };
-    targets: Array<{ id: string; label: string; kind: string }>;
-    status: "resolved" | "unresolved";
-    error?: string;
-  }>;
-  authoredConstraintsStatus?: "available" | "unavailable" | "not-requested";
-  authoredConstraintsError?: string;
-  authoredConstraints?: {
-    constraints: Array<
-      { id: string; name: string; expression: RequirementExpression }
-    >;
-    errors?: Array<{ id: string; name: string; error: string }>;
-    message?: string;
-  };
-}
-
-interface TraceData extends Record<string, unknown> {
-  rootId: string;
-  requirementsCount: number;
-  traces: TraceEntry[];
-  error?: string;
-  coverage: {
-    total: number;
-    satisfied: number;
-    unsatisfied: number;
-    percentage: number;
-  };
-}
 
 function TraceResultError(
   { error, locale }: { error: string | undefined; locale?: string },
@@ -208,7 +174,11 @@ function TraceList(
   }
   const t = sysonMessages(context.hostContext.locale);
   const [opened, setOpened] = useState<string>();
-  const { controller, snapshot } = useSysonSelection(context, data.rootId);
+  const { controller, snapshot } = useSysonSelection(
+    context,
+    data.rootId,
+    data.editingContextId,
+  );
   const [mode, setMode] = useState<
     "all" | "linked" | "unlinked" | "unresolved"
   >("all");

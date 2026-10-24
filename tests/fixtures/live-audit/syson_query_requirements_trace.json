@@ -1,0 +1,183 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Traced 7 requirements: 0 covered (0.0%)."
+    }
+  ],
+  "structuredContent": {
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "scope": {
+      "kind": "element",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+      "rootId": "738907af-25b2-4240-83f9-ce0a58a41ac7"
+    },
+    "rootId": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+    "requirementsCount": 7,
+    "traces": [
+      {
+        "requirement": {
+          "id": "c256126b-9842-4f7b-aa67-440aedd940c8",
+          "label": "RequirementUsage"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [],
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "requirement": {
+          "id": "4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+          "label": "batmobileSpecification"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [
+          {
+            "relationship": {
+              "id": "713b37a1-3e61-4179-aa43-d656b440135a",
+              "label": "SatisfyRequirementUsage",
+              "kind": "siriusComponents://semantic?domain=sysml&entity=SatisfyRequirementUsage"
+            },
+            "targets": [],
+            "status": "unresolved",
+            "error": "Unexpected relationship result: VoidExpressionResult"
+          }
+        ],
+        "error": "Unexpected relationship result: VoidExpressionResult",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "errors": [
+            {
+              "id": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+              "name": "batmobileMaxSpeed",
+              "error": "No body expression found"
+            },
+            {
+              "id": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+              "name": "batmobileAcceleration",
+              "error": "No body expression found"
+            }
+          ]
+        }
+      },
+      {
+        "requirement": {
+          "id": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+          "label": "batmobileMaxSpeed"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [],
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "requirement": {
+          "id": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+          "label": "batmobileAcceleration"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [],
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "requirement": {
+          "id": "e8780d44-8332-44e7-99f3-7a5865c9da68",
+          "label": "Reduce the number of special parts"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [],
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "requirement": {
+          "id": "8f148a89-31e3-4270-8578-575ce6c51cbc",
+          "label": "system components"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [
+          {
+            "relationship": {
+              "id": "88cef9fb-0d31-4952-b9d9-de4d78a691ec",
+              "label": "SatisfyRequirementUsage",
+              "kind": "siriusComponents://semantic?domain=sysml&entity=SatisfyRequirementUsage"
+            },
+            "targets": [],
+            "status": "unresolved",
+            "error": "Unexpected relationship result: VoidExpressionResult"
+          }
+        ],
+        "error": "Unexpected relationship result: VoidExpressionResult",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "errors": [
+            {
+              "id": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+              "name": "Reduce the number of special parts",
+              "error": "No body expression found"
+            },
+            {
+              "id": "de49c028-35de-4860-9cef-c2257f9d5ffa",
+              "name": "ConstraintUsage",
+              "error": "No body expression found"
+            }
+          ]
+        }
+      },
+      {
+        "requirement": {
+          "id": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+          "label": "Reduce the number of special parts"
+        },
+        "verificationStatus": "unknown",
+        "satisfiedBy": [],
+        "satisfactionLinks": [],
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      }
+    ],
+    "coverage": {
+      "total": 7,
+      "satisfied": 0,
+      "unsatisfied": 7,
+      "percentage": 0
+    }
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/requirements-trace-viewer",
+      "emits": [
+        "syson.requirement.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.8.7"
+    }
+  },
+  "resultType": "complete"
+}

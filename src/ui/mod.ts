@@ -39,7 +39,7 @@ const UI_BUNDLES = {
     bundle: "requirements-viewer",
     name: "Authored Requirements Viewer",
     description: "SysON UI: authored requirement limits",
-    tools: [],
+    tools: ["syson_requirements_list"],
   },
   "ui://mcp-syson/requirements-trace-viewer": {
     bundle: "requirements-trace-viewer",
