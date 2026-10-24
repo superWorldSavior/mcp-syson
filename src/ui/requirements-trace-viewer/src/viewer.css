@@ -1,0 +1,84 @@
+/* Requirements trace: each requirement row carries its trace links on one
+   quiet line, aligned with the row label. Kit theme tokens only. */
+
+.syson-trace-rows {
+  gap: 10px;
+}
+
+.syson-trace-item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Row padding (10px) + kind pill (2.7rem) + row gap (10px): under the label. */
+.syson-trace-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px 0 calc(20px + 2.7rem);
+}
+
+.syson-trace-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.syson-trace-link dt {
+  color: var(--mcp-view-quiet, #7b8894);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.syson-trace-link dd {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+}
+
+.syson-trace-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Linked element: a compact selectable chip; the kit draws its context state. */
+.syson-trace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 1.6rem;
+  padding: 1px 9px 1px 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.syson-trace-chip[data-context-state="none"]:hover {
+  border-color: color-mix(in srgb, var(--mcp-view-accent, #0d7c8a) 45%,
+    var(--mcp-view-border, #dbe3e7));
+  background: var(--mcp-view-subtle, #f4f7f8);
+}
+.syson-trace-chip .syson-kind-mark {
+  min-width: 0;
+  height: 1.15rem;
+  padding: 0 4px;
+  font-size: 0.55rem;
+}
+.syson-trace-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (max-width: 520px) {
+  .syson-trace-links {
+    gap: 6px 16px;
+    padding-inline-start: 10px;
+  }
+}

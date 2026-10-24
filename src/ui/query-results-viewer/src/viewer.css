@@ -1,0 +1,121 @@
+/* Query-results viewer (UX v1). Shared chrome lives in ../../global.css. */
+
+/* The query that produced the rows: one calm monospace line, expandable. */
+.syson-query-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px 4px 8px;
+  border-radius: var(--mcp-view-radius-control, 6px);
+  background: var(--mcp-view-subtle, #f4f7f8);
+}
+.syson-query-kind {
+  flex: 0 0 auto;
+  color: var(--mcp-view-quiet, #7b8894);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: var(--mcp-view-size-micro, 10px);
+  letter-spacing: 0.08em;
+  line-height: 1.8;
+  text-transform: uppercase;
+}
+.syson-query-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mcp-view-text-secondary, #34424c);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.syson-query-line[data-expanded="true"] .syson-query-text {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.syson-query-scope {
+  flex: 0 0 auto;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.syson-query-toggle {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-block: -1px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--mcp-view-radius-sm, 4px);
+  background: transparent;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.syson-query-toggle:hover,
+.syson-query-toggle:focus-visible {
+  border-color: var(--mcp-view-border, #dbe3e7);
+  background: var(--mcp-view-panel, #ffffff);
+  color: var(--mcp-view-accent-text, #0d7c8a);
+}
+.syson-query-toggle:focus-visible {
+  outline: 2px solid var(--mcp-view-accent, #0d7c8a);
+  outline-offset: 1px;
+}
+.syson-query-toggle > span {
+  display: inline-block;
+  transform: translateY(-2px);
+  transition: transform 120ms ease;
+}
+.syson-query-line[data-expanded="true"] .syson-query-toggle > span {
+  transform: translateY(2px) rotate(180deg);
+}
+
+/* Sort sits with the kind chips so the header stays the explorer's. */
+.syson-query-sort {
+  align-items: center;
+  margin-inline-start: auto;
+}
+.syson-query-sort-label {
+  margin-inline-end: 2px;
+  color: var(--mcp-view-quiet, #7b8894);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: var(--mcp-view-size-micro, 10px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Kind names for assistive technology: the kind pill itself is aria-hidden. */
+.syson-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Scalar AQL result: one reading, no nested frame. */
+.syson-query-scalar .mcp-view-element-reading-value {
+  overflow-wrap: anywhere;
+}
+
+/* Narrow frames keep the query on one line and move its scope below it. */
+@container (max-width: 520px) {
+  .syson-query-line {
+    flex-wrap: wrap;
+  }
+  .syson-query-scope {
+    order: 1;
+    flex-basis: 100%;
+  }
+}

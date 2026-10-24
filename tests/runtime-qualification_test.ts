@@ -383,7 +383,14 @@ class FixtureMcpClient implements McpClient {
   #elementName = "";
   readonly calls: Array<{ name: string; args: Record<string, unknown> }> = [];
 
-  constructor(private readonly drift: { elementReadLabel?: string } = {}) {}
+  constructor(
+    private readonly drift: {
+      elementReadLabel?: string;
+      childrenEditingContextId?: string;
+      omitChildrenEditingContextId?: boolean;
+      childrenExtraField?: boolean;
+    } = {},
+  ) {}
 
   request(
     method: string,
@@ -481,6 +488,12 @@ class FixtureMcpClient implements McpClient {
       case "syson_element_children":
         return {
           parentId: "root-1",
+          ...(!this.drift.omitChildrenEditingContextId &&
+            {
+              editingContextId: this.drift.childrenEditingContextId ??
+                "context-1",
+            }),
+          ...(this.drift.childrenExtraField && { authority: "write" }),
           children: [{
             id: "element-1",
             kind: "siriusComponents://semantic?domain=sysml&entity=PartUsage",
@@ -493,3 +506,67 @@ class FixtureMcpClient implements McpClient {
     }
   }
 }
+
+Deno.test("runtime qualification accepts optional context but rejects unknown schema properties", () => {
+  const contracts = new SysonToolsClient().toMCPFormat();
+  const children = assertBoundedToolContracts(contracts).find((tool) =>
+    tool.name === "syson_element_children"
+  )!;
+  const output = children.outputSchema as Record<string, unknown>;
+  assertEquals(
+    (output.properties as Record<string, unknown>).editingContextId,
+    { type: "string", minLength: 1 },
+  );
+  assertEquals(output.required, ["parentId", "children", "count"]);
+  const unknown = contracts.map((tool) =>
+    tool.name === "syson_element_children"
+      ? {
+        ...tool,
+        outputSchema: {
+          ...tool.outputSchema,
+          properties: {
+            ...(tool.outputSchema?.properties as Record<string, unknown>),
+            authority: { type: "string" },
+          },
+        },
+      }
+      : tool
+  );
+  assertThrows(
+    () => assertBoundedToolContracts(unknown),
+    Error,
+    "outputSchema.properties drifted",
+  );
+});
+
+Deno.test("runtime qualification checks children context identity and preserves historical readbacks", async () => {
+  const contract = await releasedTransportContract();
+  await qualifyRuntime(
+    new FixtureMcpClient({ omitChildrenEditingContextId: true }),
+    options(),
+    runtime(),
+    contract,
+  );
+  await assertRejects(
+    () =>
+      qualifyRuntime(
+        new FixtureMcpClient({ childrenEditingContextId: "wrong-context" }),
+        options(),
+        runtime(),
+        contract,
+      ),
+    Error,
+    "root children editing context id",
+  );
+  await assertRejects(
+    () =>
+      qualifyRuntime(
+        new FixtureMcpClient({ childrenExtraField: true }),
+        options(),
+        runtime(),
+        contract,
+      ),
+    Error,
+    "root children readback structuredContent",
+  );
+});

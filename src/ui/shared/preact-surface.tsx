@@ -6,7 +6,7 @@
  * Human-facing viewer titles live in the HTML and component surface, not in appInfo.
  */
 
-import { readResultData, type ResultData } from "@casys/mcp-view";
+import { readResultData, type ResultData } from "@mcpview/view";
 import {
   createTranslator,
   mcpViewMessages,
@@ -14,16 +14,17 @@ import {
   type ViewComponentDefinition,
   type ViewComponentDescriptor,
   type ViewComponentRegistry,
-} from "@casys/mcp-view-components";
+} from "@mcpview/components";
 import {
   definePreactComponent as defineKitPreactComponent,
   type PreactSurfaceComponentProps,
   type PreactSurfaceContext,
   startPreactSurfaceApp,
   type SurfaceLabel,
-} from "@casys/mcp-view-components/preact";
-import { installMcpViewFonts } from "@casys/mcp-view-components/fonts";
-import { createElement, type FunctionComponent } from "preact";
+} from "@mcpview/components/preact";
+import { installMcpViewFonts } from "@mcpview/components/fonts";
+import { createElement, type FunctionComponent, render } from "preact";
+import { CasysCredit } from "./CasysCredit.tsx";
 import { SYSON_VIEW_APP_MANIFEST, type SysonViewKey } from "../app-manifest.ts";
 import {
   SYSON_MESSAGES_EN,
@@ -36,6 +37,7 @@ import {
   type SysonRecordedContentAdapter,
   type SysonRecordedViewSession,
 } from "./recorded-session.ts";
+import { toolResultIssue } from "./tool-result.ts";
 
 export type { SurfaceLabel };
 
@@ -109,6 +111,8 @@ interface SysonViewerAppOptions<TContent extends ResultData> {
  * Theme tokens already drive the CSS/DOM, so a theme-only host change stays
  * in place; locale and surface selection still remount.
  */
+const viewerCredits = new WeakMap<HTMLElement, HTMLElement>();
+
 export async function startSysonViewerApp<TContent extends ResultData>(
   options: SysonViewerAppOptions<TContent>,
 ): Promise<void> {
@@ -117,6 +121,17 @@ export async function startSysonViewerApp<TContent extends ResultData>(
 
   document.documentElement.classList.add("syson-app");
   installMcpViewFonts(root.ownerDocument);
+
+  // The pinned surface API has no footer slot. Keep one sibling outside its
+  // remounted surface and all diagram canvas/selection event boundaries.
+  let footer = viewerCredits.get(root);
+  if (!footer) {
+    footer = root.ownerDocument.createElement("footer");
+    footer.className = "syson-viewer-credit";
+    root.after(footer);
+    render(createElement(CasysCredit, {}), footer);
+    viewerCredits.set(root, footer);
+  }
 
   await startPreactSurfaceApp({
     root,
@@ -130,6 +145,11 @@ export async function startSysonViewerApp<TContent extends ResultData>(
     emptyLabel,
     documentLanguage: sysonMessages.locale,
     themeUpdates: "in-place",
+    onTeardown: () => {
+      render(null, footer);
+      footer.remove();
+      viewerCredits.delete(root);
+    },
     fromToolResult: (result) => {
       const validate = (value: unknown): value is TContent =>
         validateContent(value);
@@ -137,6 +157,26 @@ export async function startSysonViewerApp<TContent extends ResultData>(
         fallback: "json-text",
         validate,
       });
+      const issue = toolResultIssue(result, content !== undefined);
+      if (issue) {
+        return {
+          kind: "error",
+          title: (locale) =>
+            sysonMessages(locale)(
+              issue.kind === "provider"
+                ? "toolErrorTitle"
+                : "invalidToolDataTitle",
+            ),
+          code: issue.code,
+          message: (locale) =>
+            issue.message ||
+            sysonMessages(locale)(
+              issue.kind === "provider"
+                ? "toolErrorTitle"
+                : "invalidToolDataMessage",
+            ),
+        };
+      }
       return content
         ? { kind: "result", result: { content } }
         : { kind: "empty" };

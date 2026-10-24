@@ -1,5 +1,5 @@
 import { assertEquals, assertMatch, assertRejects } from "@std/assert";
-import { MCP_APP_MIME_TYPE } from "@casys/mcp-server";
+import { MCP_APP_MIME_TYPE } from "@mcpview/server";
 import { registerUiResources } from "../server.ts";
 import { loadUiHtml, UI_RESOURCE_URIS, UI_RESOURCES } from "../src/ui/mod.ts";
 
@@ -23,6 +23,10 @@ Deno.test("ships all SysON viewer bundles as readable UI resources", async () =>
     assertMatch(html, /<div id="app"><\/div>/i);
   }
 
+  assertEquals(
+    UI_RESOURCES["ui://mcp-syson/requirements-viewer"].tools,
+    ["syson_requirements_list"],
+  );
   assertEquals(
     UI_RESOURCES["ui://mcp-syson/model-explorer-viewer"].tools,
     ["syson_element_children"],

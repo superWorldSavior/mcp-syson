@@ -1,3 +1,20 @@
+import {
+  type RequirementsTraceData,
+  type RequirementsViewData,
+  type ValidationConstraint,
+  validationDiagnostics,
+  type ValidationReport,
+} from "../../viewer-data.ts";
+export type {
+  AuthoredRequirement,
+  ElementIdentity,
+  RequirementsTraceData,
+  RequirementsViewData,
+  RequirementTraceEntry,
+  ValidationDiagnostic,
+  ValidationReport,
+  ViewerScope,
+} from "../../viewer-data.ts";
 /** App-owned structural guards for recorded SysON structuredContent. */
 
 import { SYSON_DIGITAL_THREAD_RESULT_SCHEMAS } from "../app-manifest.ts";
@@ -133,8 +150,25 @@ export function isDiagramSnapshot(
       "svg",
       "renderer",
     ],
-    ["rendererWarning"],
+    [
+      "rendererWarning",
+      "editingContextId",
+      "targetObjectId",
+      "metadata",
+      "hiddenNodeCount",
+      "hiddenEdgeCount",
+    ],
   ) &&
+    optionalString(value, "editingContextId", true) &&
+    ["hiddenNodeCount", "hiddenEdgeCount"].every((key) =>
+      value[key] === undefined || isNonNegativeInteger(value[key])
+    ) &&
+    optionalString(value, "targetObjectId") &&
+    (value.metadata === undefined ||
+      (isExactRecord(value.metadata, ["label", "kind", "description"]) &&
+        typeof value.metadata.label === "string" &&
+        typeof value.metadata.kind === "string" &&
+        isDescription(value.metadata.description))) &&
     isNonEmptyString(value.diagramId) &&
     typeof value.diagramLabel === "string" &&
     isNonNegativeInteger(value.nodeCount) &&
@@ -152,7 +186,10 @@ export function isDiagramSnapshot(
 export function isModelChildren(
   value: unknown,
 ): value is Record<string, unknown> {
-  return isExactRecord(value, ["parentId", "children", "count"]) &&
+  return hasRequiredAndOptionalKeys(value, ["parentId", "children", "count"], [
+    "editingContextId",
+  ]) &&
+    optionalString(value, "editingContextId", true) &&
     isNonEmptyString(value.parentId) &&
     isDenseJsonArray(value.children) && value.children.every(isIdentity) &&
     isNonNegativeInteger(value.count) &&
@@ -162,6 +199,10 @@ export function isModelChildren(
 export function isQueryResult(
   value: unknown,
 ): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (!isViewerMetadata(value)) return false;
+  const { editingContextId: _ec, scope: _scope, ...legacy } = value;
+  value = legacy;
   if (!isRecord(value)) return false;
   if (value.type === undefined) {
     return isExactRecord(value, ["query", "results", "count"]) &&
@@ -189,13 +230,21 @@ export function isQueryResult(
 
 export function isRequirementsTrace(
   value: unknown,
-): value is Record<string, unknown> {
+): value is RequirementsTraceData {
   if (
     !hasRequiredAndOptionalKeys(
       value,
       ["rootId", "requirementsCount", "traces", "coverage"],
-      ["error"],
-    ) || !isNonEmptyString(value.rootId) ||
+      [
+        "error",
+        "editingContextId",
+        "scope",
+        "authoredConstraintsStatus",
+        "authoredConstraintsError",
+        "authoredConstraints",
+      ],
+    ) || !isViewerMetadata(value) || !isAuthoredEnrichment(value) ||
+    !isNonEmptyString(value.rootId) ||
     !isNonNegativeInteger(value.requirementsCount) ||
     !isDenseJsonArray(value.traces) || !value.traces.every(isTrace) ||
     !isExactRecord(value.coverage, [
@@ -209,7 +258,8 @@ export function isRequirementsTrace(
   const coverage = value.coverage;
   const satisfied =
     value.traces.filter((trace) =>
-      isRecord(trace) && isDenseJsonArray(trace.satisfiedBy) &&
+      isRecord(trace) && trace.error === undefined &&
+      isDenseJsonArray(trace.satisfiedBy) &&
       trace.satisfiedBy.length > 0
     ).length;
   const total = value.traces.length;
@@ -227,9 +277,9 @@ export function isRequirementsTrace(
 
 export function isValidationReport(
   value: unknown,
-): value is Record<string, unknown> {
+): value is ValidationReport {
   if (
-    !isExactRecord(value, [
+    !hasRequiredAndOptionalKeys(value, [
       "editingContextId",
       "elementId",
       "elementName",
@@ -237,7 +287,8 @@ export function isValidationReport(
       "summary",
       "resolvedValues",
       "validatedAt",
-    ]) || !isNonEmptyString(value.editingContextId) ||
+    ], ["scope", "diagnostics"]) || !isViewerMetadata(value) ||
+    !isNonEmptyString(value.editingContextId) ||
     !isNonEmptyString(value.elementId) ||
     typeof value.elementName !== "string" ||
     !isDenseJsonArray(value.constraints) ||
@@ -253,6 +304,40 @@ export function isValidationReport(
     typeof value.validatedAt !== "string" ||
     !Number.isFinite(Date.parse(value.validatedAt))
   ) return false;
+  if (value.diagnostics !== undefined) {
+    const expected = validationDiagnostics(
+      value.constraints as unknown as ValidationConstraint[],
+      value.elementId,
+      value.elementName,
+    );
+    if (
+      !isDenseJsonArray(value.diagnostics) ||
+      value.diagnostics.length !== expected.length ||
+      !value.diagnostics.every((diagnostic, index) => {
+        const source = expected[index];
+        return isExactRecord(diagnostic, [
+          "id",
+          "severity",
+          "message",
+          "source",
+          "constraint",
+          "element",
+          "attribution",
+        ]) &&
+          isExactRecord(diagnostic.constraint, ["id", "label"]) &&
+          isExactRecord(diagnostic.element, ["id", "label"]) &&
+          diagnostic.id === source.id &&
+          diagnostic.severity === source.severity &&
+          diagnostic.message === source.message &&
+          diagnostic.source === source.source &&
+          diagnostic.attribution === source.attribution &&
+          diagnostic.constraint.id === source.constraint.id &&
+          diagnostic.constraint.label === source.constraint.label &&
+          diagnostic.element.id === source.element.id &&
+          diagnostic.element.label === source.element.label;
+      })
+    ) return false;
+  }
   const summary = value.summary;
   const counts = { pass: 0, fail: 0, error: 0, unresolved: 0 };
   for (const constraint of value.constraints) {
@@ -271,6 +356,10 @@ export function isValueResult(
   value: unknown,
 ): value is Record<string, unknown> {
   if (!isRecord(value) || !isNonEmptyString(value.element_id)) return false;
+  if (!isViewerMetadata(value)) return false;
+  const { editingContextId: _ec, scope: _scope, ...legacy } = value;
+  value = legacy;
+  if (!isRecord(value)) return false;
   if ("old_value" in value) {
     const shapeIsValid = hasRequiredAndOptionalKeys(
       value,
@@ -308,11 +397,23 @@ export function isValueResult(
     typeof value.negated === "boolean";
 }
 
-function isIdentity(value: unknown): boolean {
+function isBareIdentity(value: unknown): boolean {
   return isExactRecord(value, ["id", "kind", "label"]) &&
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.kind) &&
+    isNonEmptyString(value.id) && isNonEmptyString(value.kind) &&
     typeof value.label === "string";
+}
+function isIdentity(value: unknown): boolean {
+  return hasRequiredAndOptionalKeys(value, ["id", "kind", "label"], [
+    "owner",
+    "path",
+    "childCount",
+  ]) &&
+    isNonEmptyString(value.id) && isNonEmptyString(value.kind) &&
+    typeof value.label === "string" &&
+    (value.owner === undefined || isBareIdentity(value.owner)) &&
+    (value.path === undefined ||
+      (isDenseJsonArray(value.path) && value.path.every(isBareIdentity))) &&
+    (value.childCount === undefined || isNonNegativeInteger(value.childCount));
 }
 
 interface CapturedIdentity {
@@ -555,29 +656,239 @@ function isTimestamp(value: unknown): boolean {
 }
 
 function isSearchIdentity(value: unknown): boolean {
-  return isExactRecord(value, ["id", "kind", "label", "iconURLs"]) &&
-    isNonEmptyString(value.id) && isNonEmptyString(value.kind) &&
-    typeof value.label === "string" && isDenseJsonArray(value.iconURLs) &&
-    value.iconURLs.every((url) => typeof url === "string");
+  if (
+    !hasRequiredAndOptionalKeys(value, ["id", "kind", "label", "iconURLs"], [
+      "owner",
+      "path",
+      "childCount",
+    ])
+  ) return false;
+  const { iconURLs, ...identity } = value;
+  // Native search results may have an empty kind; all other identity fields
+  // still follow the shared identity contract.
+  return typeof identity.kind === "string" &&
+    isIdentity({ ...identity, kind: identity.kind || "unknown" }) &&
+    isDenseJsonArray(iconURLs) &&
+    iconURLs.every((url) => typeof url === "string");
 }
-
+function optionalString(
+  value: Record<string, unknown>,
+  key: string,
+  nonempty = false,
+): boolean {
+  return value[key] === undefined ||
+    (nonempty ? isNonEmptyString(value[key]) : typeof value[key] === "string");
+}
+function isDescription(value: unknown): boolean {
+  return isExactRecord(value, ["id", "label"]) && isNonEmptyString(value.id) &&
+    typeof value.label === "string";
+}
+function isNativeNodeStyle(value: unknown): boolean {
+  return hasRequiredAndOptionalKeys(value, ["kind"], [
+    "background",
+    "borderColor",
+    "borderRadius",
+    "borderSize",
+    "borderStyle",
+    "imageURL",
+    "childrenLayout",
+  ]) && typeof value.kind === "string" &&
+    (value.childrenLayout === undefined ||
+      value.childrenLayout === "list" || value.childrenLayout === "free") &&
+    [
+      "ImageNodeStyle",
+      "IconLabelNodeStyle",
+      "RectangularNodeStyle",
+      "SysMLPackageNodeStyle",
+      "SysMLImportedPackageNodeStyle",
+      "SysMLNoteNodeStyle",
+      "SysMLViewFrameNodeStyle",
+      "EllipseNodeStyle",
+    ].includes(value.kind) &&
+    ["background", "borderColor", "borderStyle", "imageURL"].every((key) =>
+      optionalString(value, key)
+    ) &&
+    ["borderRadius", "borderSize"].every((key) =>
+      value[key] === undefined ||
+      (isFiniteNumber(value[key]) && (value[key] as number) >= 0)
+    );
+}
 function isDiagramNode(value: unknown): boolean {
-  return isExactRecord(value, ["id", "label"]) &&
-    isNonEmptyString(value.id) && typeof value.label === "string";
+  return hasRequiredAndOptionalKeys(value, ["id", "label"], [
+    "targetObjectId",
+    "type",
+    "parentId",
+    "kind",
+    "hasLayout",
+    "faded",
+    "outsideLabels",
+    "style",
+    "x",
+    "y",
+    "width",
+    "height",
+  ]) && isNonEmptyString(value.id) && typeof value.label === "string" &&
+    (value.faded === undefined || value.faded === true) &&
+    ["targetObjectId", "type", "parentId"].every((key) =>
+      optionalString(value, key)
+    ) &&
+    (value.kind === undefined ||
+      (typeof value.kind === "string" &&
+        ["node", "compartment", "port"].includes(value.kind))) &&
+    (value.outsideLabels === undefined ||
+      (isDenseJsonArray(value.outsideLabels) &&
+        value.outsideLabels.every((label) => typeof label === "string"))) &&
+    (value.style === undefined || isNativeNodeStyle(value.style)) &&
+    (value.hasLayout === undefined || typeof value.hasLayout === "boolean") &&
+    ["x", "y", "width", "height"].every((key) =>
+      value[key] === undefined || isFiniteNumber(value[key])
+    ) &&
+    ["width", "height"].every((key) =>
+      value[key] === undefined || (value[key] as number) >= 0
+    );
+}
+function isDiagramEdge(value: unknown): boolean {
+  return hasRequiredAndOptionalKeys(value, ["id", "sourceId", "targetId"], [
+    "label",
+    "targetObjectId",
+    "type",
+    "beginLabel",
+    "endLabel",
+    "style",
+    "faded",
+    "routingPoints",
+  ]) &&
+    ["id", "sourceId", "targetId"].every((key) =>
+      isNonEmptyString(value[key])
+    ) &&
+    (value.faded === undefined || value.faded === true) &&
+    (value.style === undefined ||
+      (isExactRecord(value.style, [
+        "lineStyle",
+        "sourceArrow",
+        "targetArrow",
+      ]) &&
+        ["lineStyle", "sourceArrow", "targetArrow"].every((key) =>
+          typeof (value.style as Record<string, unknown>)[key] === "string"
+        ))) &&
+    ["label", "targetObjectId", "type", "beginLabel", "endLabel"].every((key) =>
+      optionalString(value, key)
+    ) &&
+    (value.routingPoints === undefined ||
+      (isDenseJsonArray(value.routingPoints) &&
+        value.routingPoints.every((point) =>
+          isExactRecord(point, ["x", "y"]) && isFiniteNumber(point.x) &&
+          isFiniteNumber(point.y)
+        )));
 }
 
-function isDiagramEdge(value: unknown): boolean {
-  return isExactRecord(value, ["id", "sourceId", "targetId", "label"]) &&
-    isNonEmptyString(value.id) && isNonEmptyString(value.sourceId) &&
-    isNonEmptyString(value.targetId) && typeof value.label === "string";
+/** Bounded recursive AST guard; payloads remain data and cannot add authority. */
+function isConstraintExpression(value: unknown, depth = 0): boolean {
+  if (depth > 48 || !isRecord(value)) return false;
+  switch (value.kind) {
+    case "literal":
+      return hasRequiredAndOptionalKeys(value, ["kind", "value"], ["unit"]) &&
+        isFiniteNumber(value.value) && optionalString(value, "unit");
+    case "ref":
+      return hasRequiredAndOptionalKeys(value, ["kind", "featurePath"], [
+        "elementId",
+      ]) && isDenseJsonArray(value.featurePath) &&
+        value.featurePath.every((p) => typeof p === "string") &&
+        optionalString(value, "elementId");
+    case "binary":
+      return isExactRecord(value, ["kind", "op", "left", "right"]) &&
+        typeof value.op === "string" &&
+        ["+", "-", "*", "/", "<", "<=", ">", ">=", "==", "!=", "and", "or"]
+          .includes(value.op) &&
+        isConstraintExpression(value.left, depth + 1) &&
+        isConstraintExpression(value.right, depth + 1);
+    case "unary":
+      return isExactRecord(value, ["kind", "op", "operand"]) &&
+        typeof value.op === "string" && ["not", "-"].includes(value.op) &&
+        isConstraintExpression(value.operand, depth + 1);
+    case "call":
+      return isExactRecord(value, ["kind", "name", "args"]) &&
+        typeof value.name === "string" && isDenseJsonArray(value.args) &&
+        value.args.every((arg) => isConstraintExpression(arg, depth + 1));
+    default:
+      return false;
+  }
+}
+function isAuthoredEnrichment(value: Record<string, unknown>): boolean {
+  if (
+    value.authoredConstraintsStatus !== undefined &&
+    !(typeof value.authoredConstraintsStatus === "string" &&
+      ["available", "unavailable", "not-requested"].includes(
+        value.authoredConstraintsStatus,
+      ))
+  ) return false;
+  if (!optionalString(value, "authoredConstraintsError")) return false;
+  if (
+    value.authoredConstraintsStatus === "available" &&
+    value.authoredConstraints === undefined
+  ) return false;
+  if (
+    value.authoredConstraintsStatus === "not-requested" &&
+    value.authoredConstraints !== undefined
+  ) return false;
+  if (value.authoredConstraints === undefined) return true;
+  const authored = value.authoredConstraints;
+  return hasRequiredAndOptionalKeys(authored, ["constraints"], [
+    "errors",
+    "message",
+  ]) && isDenseJsonArray(authored.constraints) &&
+    authored.constraints.every((c) =>
+      hasRequiredAndOptionalKeys(c, ["id", "name", "expression"], [
+        "sourceId",
+      ]) && isNonEmptyString(c.id) && typeof c.name === "string" &&
+      optionalString(c, "sourceId") && isConstraintExpression(c.expression)
+    ) && optionalString(authored, "message") &&
+    (authored.errors === undefined ||
+      (isDenseJsonArray(authored.errors) &&
+        authored.errors.every((e) =>
+          isExactRecord(e, ["id", "name", "error"]) && isNonEmptyString(e.id) &&
+          typeof e.name === "string" && typeof e.error === "string"
+        )));
 }
 
 function isTrace(value: unknown): boolean {
   return hasRequiredAndOptionalKeys(
     value,
     ["requirement", "satisfiedBy"],
-    ["error"],
-  ) && isDiagramNode(value.requirement) &&
+    [
+      "error",
+      "satisfactionLinks",
+      "verifiedBy",
+      "verificationStatus",
+      "authoredConstraintsStatus",
+      "authoredConstraintsError",
+      "authoredConstraints",
+    ],
+  ) && isAuthoredEnrichment(value) &&
+    (value.verifiedBy === undefined ||
+      (isDenseJsonArray(value.verifiedBy) &&
+        value.verifiedBy.every(isIdentity))) &&
+    (value.verificationStatus === undefined ||
+      ["unknown", "available"].includes(String(value.verificationStatus))) &&
+    (value.verificationStatus !== "unknown" ||
+      value.verifiedBy === undefined) &&
+    isDescription(value.requirement) &&
+    (value.satisfactionLinks === undefined ||
+      (isDenseJsonArray(value.satisfactionLinks) &&
+        value.satisfactionLinks.every((link) =>
+          hasRequiredAndOptionalKeys(link, [
+            "relationship",
+            "targets",
+            "status",
+          ], ["error"]) && isIdentity(link.relationship) &&
+          isDenseJsonArray(link.targets) && link.targets.every(isIdentity) &&
+          typeof link.status === "string" &&
+          ["resolved", "unresolved"].includes(link.status) &&
+          (link.status === "resolved"
+            ? link.targets.length > 0
+            : link.targets.length === 0) &&
+          optionalString(link, "error")
+        ))) &&
     isDenseJsonArray(value.satisfiedBy) &&
     value.satisfiedBy.every(isIdentity) &&
     (value.error === undefined || typeof value.error === "string");
@@ -637,4 +948,93 @@ function hasRequiredAndOptionalKeys(
   }
   const allowed = new Set([...required, ...optional]);
   return Object.keys(value).every((key) => allowed.has(key));
+}
+
+/** Optional metadata is closed and cannot substitute a project ID for a semantic root. */
+export function isViewerMetadata(value: Record<string, unknown>): boolean {
+  if (!optionalString(value, "editingContextId", true)) return false;
+  if (value.scope === undefined) return true;
+  const scope = value.scope;
+  return hasRequiredAndOptionalKeys(scope, ["kind", "editingContextId"], [
+    "rootId",
+    "projectId",
+    "selectedObjectIds",
+    "project",
+    "owner",
+    "path",
+  ]) &&
+    ["element", "project", "selection"].includes(String(scope.kind)) &&
+    isNonEmptyString(scope.editingContextId) &&
+    (value.editingContextId === undefined ||
+      value.editingContextId === scope.editingContextId) &&
+    optionalString(scope, "rootId", true) &&
+    optionalString(scope, "projectId", true) &&
+    (scope.kind !== "element" || isNonEmptyString(scope.rootId)) &&
+    (scope.kind !== "project" || isNonEmptyString(scope.projectId)) &&
+    (scope.selectedObjectIds === undefined ||
+      (isDenseJsonArray(scope.selectedObjectIds) &&
+        scope.selectedObjectIds.every(isNonEmptyString))) &&
+    (scope.project === undefined || isIdentity(scope.project)) &&
+    (scope.owner === undefined || isIdentity(scope.owner)) &&
+    (scope.path === undefined ||
+      (isDenseJsonArray(scope.path) && scope.path.every(isIdentity)));
+}
+export function isRequirementsViewData(
+  value: unknown,
+): value is RequirementsViewData {
+  if (isRequirementsCaptureReadModel(value)) return true;
+  return hasRequiredAndOptionalKeys(value, [
+    "kind",
+    "rootId",
+    "editingContextId",
+    "scope",
+    "target",
+    "requirements",
+    "count",
+  ], []) &&
+    value.kind === "live-requirements" && isViewerMetadata(value) &&
+    isNonEmptyString(value.rootId) && isIdentity(value.target) &&
+    isDenseJsonArray(value.requirements) &&
+    value.requirements.every((row) =>
+      hasRequiredAndOptionalKeys(row, [
+        "id",
+        "name",
+        "kind",
+        "textStatus",
+        "identifierStatus",
+        "coverageStatus",
+        "authoredConstraintsStatus",
+      ], [
+        "text",
+        "identifier",
+        "metric",
+        "operator",
+        "limit",
+        "authoredConstraints",
+        "authoredConstraintsError",
+        "owner",
+        "path",
+      ]) &&
+      isNonEmptyString(row.id) && typeof row.name === "string" &&
+      isNonEmptyString(row.kind) &&
+      ["available", "unavailable"].includes(String(row.textStatus)) &&
+      ["available", "unavailable"].includes(String(row.identifierStatus)) &&
+      (row.textStatus === "available"
+        ? typeof row.text === "string" && row.text.length > 0
+        : row.text === undefined) &&
+      (row.identifierStatus === "available"
+        ? isNonEmptyString(row.identifier)
+        : row.identifier === undefined) &&
+      row.coverageStatus === "unknown" && isAuthoredEnrichment(row) &&
+      (row.limit === undefined
+        ? row.metric === undefined && row.operator === undefined
+        : hasRequiredAndOptionalKeys(row.limit, ["value", "unit"], []) &&
+          isFiniteNumber(row.limit.value) &&
+          typeof row.limit.unit === "string" && isNonEmptyString(row.metric) &&
+          isNonEmptyString(row.operator)) &&
+      (row.owner === undefined || isIdentity(row.owner)) &&
+      (row.path === undefined ||
+        (isDenseJsonArray(row.path) && row.path.every(isIdentity)))
+    ) && isNonNegativeInteger(value.count) &&
+    value.count === value.requirements.length;
 }

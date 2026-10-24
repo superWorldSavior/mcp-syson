@@ -14,6 +14,7 @@ import {
 import {
   SYSON_DIGITAL_THREAD_RESULT_SCHEMAS,
   SYSON_RECORDED_SESSION_SCHEMAS,
+  SYSON_RESULT_SCHEMAS,
   SYSON_UI_RESOURCE_URIS,
 } from "../src/ui/app-manifest.ts";
 
@@ -28,8 +29,11 @@ const USAGE_ID = "122501cd-54d6-4aa9-b6a6-50b361ee2168";
  * SHA-256 of a labelled fixture string, so it is well-formed, stable and obviously
  * derived rather than a hand-typed pattern.
  */
-async function fixtureDigest(label: string): Promise<string> {
-  const bytes = new TextEncoder().encode(`docs/fixtures/tps03:${label}`);
+async function fixtureDigest(
+  label: string,
+  namespace = "tps03",
+): Promise<string> {
+  const bytes = new TextEncoder().encode(`docs/fixtures/${namespace}:${label}`);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(
     new Uint8Array(hash),
@@ -134,11 +138,64 @@ export async function buildRequirementsSession(): Promise<
   return { ...sessionBase, projectionFingerprint };
 }
 
+/**
+ * Build the recorded session for the diagram viewer: the FlightModes state
+ * machine snapshot recorded from the local audit project
+ * (tests/fixtures/diagram-views/state-transition.json). The viewer draws its
+ * structured nodes and edges; the server SVG is an empty placeholder.
+ */
+export async function buildDiagramSession(): Promise<Record<string, unknown>> {
+  const snapshot = JSON.parse(
+    await Deno.readTextFile(
+      new URL(
+        "../tests/fixtures/diagram-views/state-transition.json",
+        import.meta.url,
+      ),
+    ),
+  );
+  const artifactDigest = await fixtureDigest(
+    `diagram:${snapshot.diagramId}`,
+    "syson-views",
+  );
+  const sessionBase = {
+    schemaVersion: SYSON_RECORDED_SESSION_SCHEMAS.diagram,
+    resourceUri: SYSON_UI_RESOURCE_URIS.diagram,
+    resultSchema: SYSON_RESULT_SCHEMAS.diagram,
+    readOnly: true as const,
+    basis: {
+      projectId: "mcpview-ux-audit",
+      projectRevision: 1,
+      subjectId: snapshot.targetObjectId,
+      thread: { id: "syson-views", revision: 1 },
+      artifact: {
+        id: `diagram-${snapshot.diagramId}`,
+        fingerprint: `sha256:${artifactDigest}`,
+      },
+    },
+    structuredContent: {
+      ...snapshot,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      renderer: "local",
+    },
+  };
+  const projectionFingerprint = await fingerprintSysonRecordedProjection(
+    sessionBase,
+  );
+  return { ...sessionBase, projectionFingerprint };
+}
+
 if (import.meta.main) {
   const root = new URL("..", import.meta.url).pathname;
-  const outPath = `${root}docs/fixtures/requirements-session.json`;
   await Deno.mkdir(`${root}docs/fixtures`, { recursive: true });
-  const session = await buildRequirementsSession();
-  await Deno.writeTextFile(outPath, JSON.stringify(session, null, 2) + "\n");
-  console.log(`[docs:viewer-fixtures] wrote ${outPath}`);
+  for (
+    const [name, build] of [
+      ["requirements", buildRequirementsSession],
+      ["diagram", buildDiagramSession],
+    ] as const
+  ) {
+    const outPath = `${root}docs/fixtures/${name}-session.json`;
+    const session = await build();
+    await Deno.writeTextFile(outPath, JSON.stringify(session, null, 2) + "\n");
+    console.log(`[docs:viewer-fixtures] wrote ${outPath}`);
+  }
 }

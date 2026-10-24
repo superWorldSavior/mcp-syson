@@ -4,7 +4,7 @@
  * SysON exposes stateless HTTP by default and an explicit local stdio mode.
  */
 
-import { MCP_APP_MIME_TYPE, McpApp } from "@casys/mcp-server";
+import { MCP_APP_MIME_TYPE, McpApp } from "@mcpview/server";
 import { getCategories, SysonToolsClient } from "./src/client.ts";
 import { SYSON_VIEW_APP_MANIFEST } from "./src/ui/app-manifest.ts";
 import { loadUiHtml, UI_RESOURCES } from "./src/ui/mod.ts";

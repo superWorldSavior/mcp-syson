@@ -11,6 +11,7 @@
  * @module lib/syson/tools/diagram
  */
 
+import { renderLocalTopology } from "./diagram-renderer.ts";
 import type { SysonTool } from "./types.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 
@@ -49,67 +50,52 @@ function unwrapMutation<T extends object>(
   return payload;
 }
 
-function mapDiagramDescendants(
-  childToParent: Map<string, string>,
-  node: Record<string, unknown>,
-  topLevelId: string,
-): void {
-  const children = node.childNodes as
-    | Array<Record<string, unknown>>
-    | undefined;
-  const borders = node.borderNodes as
-    | Array<Record<string, unknown>>
-    | undefined;
-  for (const child of [...(children ?? []), ...(borders ?? [])]) {
-    childToParent.set(child.id as string, topLevelId);
-    mapDiagramDescendants(childToParent, child, topLevelId);
-  }
-}
-
 // ============================================================================
 // WebSocket diagram snapshot
 // ============================================================================
 
+/** Children layout of a node style: compartments stack rows, free-form ones hold nested nodes. */
+const LAYOUT = "childrenLayoutStrategy { __typename }";
+const nodeFields = (depth: number): string =>
+  `id type targetObjectId state insideLabel { text } outsideLabels { text } style { __typename ... on EllipseNodeStyle { background borderColor borderSize borderStyle ${LAYOUT} } ... on RectangularNodeStyle { background borderColor borderRadius borderSize borderStyle ${LAYOUT} } ... on ImageNodeStyle { imageURL borderColor borderRadius borderSize borderStyle ${LAYOUT} } ... on IconLabelNodeStyle { background ${LAYOUT} } ... on SysMLViewFrameNodeStyle { background borderColor borderRadius borderSize borderStyle } } defaultWidth defaultHeight ${
+    depth > 0
+      ? `borderNodes { ${nodeFields(0)} } childNodes { ${
+        nodeFields(depth - 1)
+      } }`
+      : ""
+  }`;
 const DIAGRAM_SUBSCRIPTION =
   `subscription DiagramEvent($input: DiagramEventInput!) {
-  diagramEvent(input: $input) {
-    __typename
-    ... on DiagramRefreshedEventPayload {
-      diagram {
-        id
-        metadata { label }
-        nodes {
-          id type targetObjectId
-          insideLabel { text }
-          defaultWidth defaultHeight
-          borderNodes { id type targetObjectId }
-          childNodes {
-            id type targetObjectId
-            insideLabel { text }
-            defaultWidth defaultHeight
-            borderNodes { id type targetObjectId }
-            childNodes {
-              id type targetObjectId
-              borderNodes { id type targetObjectId }
-              childNodes {
-                id type targetObjectId
-                borderNodes { id type targetObjectId }
-              }
-            }
-          }
-        }
-        edges { id sourceId targetId centerLabel { text } }
-        layoutData {
-          nodeLayoutData { id position { x y } size { width height } }
-        }
-      }
-    }
-  }
-}`;
+ diagramEvent(input: $input) { __typename ... on DiagramRefreshedEventPayload {
+ diagram { id targetObjectId metadata { label kind description { id label } }
+ nodes { ${nodeFields(8)} }
+ edges { id type targetObjectId sourceId targetId state style { lineStyle sourceArrow targetArrow } beginLabel { text } centerLabel { text } endLabel { text } }
+ layoutData { nodeLayoutData { id position { x y } size { width height } } edgeLayoutData { id bendingPoints { x y } } }
+ } } } }`;
 
 export interface DiagramNode {
   id: string;
   label: string;
+  targetObjectId?: string;
+  type?: string;
+  parentId?: string;
+  /** `node`: a top-level node or one nested in a free-form compartment; `compartment`: a compartment or a row of a list. */
+  kind?: "node" | "compartment" | "port";
+  hasLayout?: boolean;
+  /** SysON draws the node faded (ViewModifier `Faded`). */
+  faded?: true;
+  outsideLabels?: string[];
+  style?: {
+    kind: string;
+    background?: string;
+    borderColor?: string;
+    borderRadius?: number;
+    borderSize?: number;
+    borderStyle?: string;
+    imageURL?: string;
+    /** `list`: children stack as rows; `free`: children are nested nodes. */
+    childrenLayout?: "list" | "free";
+  };
   x: number;
   y: number;
   width: number;
@@ -121,6 +107,173 @@ export interface DiagramEdge {
   sourceId: string;
   targetId: string;
   label?: string;
+  targetObjectId?: string;
+  type?: string;
+  beginLabel?: string;
+  endLabel?: string;
+  /** SysON edge style: `lineStyle` Solid/Dash/Dot/Dash_Dot, arrows as SysON `ArrowStyle` names. */
+  style?: { lineStyle: string; sourceArrow: string; targetArrow: string };
+  faded?: true;
+  routingPoints?: { x: number; y: number }[];
+}
+
+export interface DiagramData {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+  label: string;
+  childToParent: Map<string, string>;
+  targetObjectId?: string;
+  metadata?: Record<string, unknown>;
+  /** Elements SysON keeps on the diagram but hides; left out of `nodes`/`edges`. */
+  hidden: { nodes: number; edges: number };
+}
+
+type Raw = Record<string, unknown>;
+
+const CHILDREN_LAYOUT: Record<string, "list" | "free"> = {
+  ListLayoutStrategy: "list",
+  FreeFormLayoutStrategy: "free",
+};
+
+/**
+ * One `DiagramRefreshedEventPayload.diagram` as flat nodes and edges with
+ * absolute layout data. Hidden elements (and everything under a hidden
+ * node, and every edge touching one) are left out: SysON keeps them on the
+ * diagram, but nobody sees them there.
+ */
+export function snapshotFromDiagram(d: Raw): DiagramData {
+  const layoutData = (d.layoutData ?? {}) as {
+    nodeLayoutData?: {
+      id: string;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+    }[];
+    edgeLayoutData?: {
+      id: string;
+      bendingPoints?: { x: number; y: number }[];
+    }[];
+  };
+  const layoutMap = new Map(
+    (layoutData.nodeLayoutData ?? []).map((l) => [l.id, l]),
+  );
+  const bends = new Map(
+    (layoutData.edgeLayoutData ?? []).map((l) => [l.id, l.bendingPoints]),
+  );
+
+  const childToParent = new Map<string, string>();
+  const nodes: DiagramNode[] = [];
+  const kept = new Set<string>();
+  let hiddenNodes = 0;
+  const countAll = (items: Raw[]): number =>
+    items.reduce(
+      (sum, n) =>
+        sum + 1 + countAll((n.childNodes ?? []) as Raw[]) +
+        countAll((n.borderNodes ?? []) as Raw[]),
+      0,
+    );
+  const visit = (
+    items: Raw[],
+    parentId?: string,
+    kind: DiagramNode["kind"] = "node",
+  ) => {
+    for (const n of items) {
+      if (n.state === "Hidden") {
+        hiddenNodes += countAll([n]);
+        continue;
+      }
+      const id = n.id as string;
+      const layout = layoutMap.get(id);
+      if (parentId) childToParent.set(id, parentId);
+      const nativeStyle = n.style as Raw | undefined;
+      let style: DiagramNode["style"];
+      if (nativeStyle) {
+        const { __typename, childrenLayoutStrategy, ...rest } = nativeStyle;
+        const childrenLayout = CHILDREN_LAYOUT[
+          (childrenLayoutStrategy as Raw | undefined)?.__typename as string
+        ];
+        style = {
+          kind: __typename as string,
+          ...rest,
+          ...(childrenLayout && { childrenLayout }),
+        };
+      }
+      kept.add(id);
+      nodes.push({
+        id,
+        label: (n.insideLabel as { text?: string } | null)?.text ?? "",
+        targetObjectId: n.targetObjectId as string,
+        type: n.type as string,
+        parentId,
+        kind,
+        ...(n.state === "Faded" && { faded: true as const }),
+        outsideLabels: ((n.outsideLabels ?? []) as { text: string }[]).map(
+          (label) => label.text,
+        ),
+        style,
+        hasLayout: !!layout,
+        x: layout?.position.x ?? 0,
+        y: layout?.position.y ?? 0,
+        width: layout?.size.width ?? (n.defaultWidth as number) ??
+          (kind === "port" ? 16 : 180),
+        height: layout?.size.height ?? (n.defaultHeight as number) ??
+          (kind === "port" ? 16 : 72),
+      });
+      // Children of a free-form node (or of a view frame) are nodes of their
+      // own; children of a list node are its compartments and rows.
+      const holdsNodes = style?.childrenLayout === "free" ||
+        style?.kind === "SysMLViewFrameNodeStyle";
+      visit(
+        (n.childNodes ?? []) as Raw[],
+        id,
+        holdsNodes ? "node" : "compartment",
+      );
+      visit((n.borderNodes ?? []) as Raw[], id, "port");
+    }
+  };
+  visit((d.nodes ?? []) as Raw[]);
+
+  let hiddenEdges = 0;
+  const edges: DiagramEdge[] = [];
+  for (const e of (d.edges ?? []) as Raw[]) {
+    if (
+      e.state === "Hidden" || !kept.has(e.sourceId as string) ||
+      !kept.has(e.targetId as string)
+    ) {
+      hiddenEdges++;
+      continue;
+    }
+    const style = e.style as DiagramEdge["style"] | undefined;
+    edges.push({
+      id: e.id as string,
+      targetObjectId: e.targetObjectId as string,
+      type: e.type as string,
+      beginLabel: (e.beginLabel as { text: string } | null)?.text,
+      endLabel: (e.endLabel as { text: string } | null)?.text,
+      ...(style && {
+        style: {
+          lineStyle: style.lineStyle,
+          sourceArrow: style.sourceArrow,
+          targetArrow: style.targetArrow,
+        },
+      }),
+      ...(e.state === "Faded" && { faded: true as const }),
+      routingPoints: bends.get(e.id as string),
+      sourceId: e.sourceId as string,
+      targetId: e.targetId as string,
+      label: (e.centerLabel as { text: string } | null)?.text,
+    });
+  }
+
+  const metadata = d.metadata as Record<string, unknown> | undefined;
+  return {
+    nodes,
+    edges,
+    label: typeof metadata?.label === "string" ? metadata.label : "",
+    childToParent,
+    targetObjectId: d.targetObjectId as string | undefined,
+    metadata,
+    hidden: { nodes: hiddenNodes, edges: hiddenEdges },
+  };
 }
 
 /**
@@ -132,14 +285,7 @@ function fetchDiagramData(
   ecId: string,
   diagramId: string,
   timeoutMs = 10_000,
-): Promise<
-  {
-    nodes: DiagramNode[];
-    edges: DiagramEdge[];
-    label: string;
-    childToParent: Map<string, string>;
-  }
-> {
+): Promise<DiagramData> {
   const wsUrl = baseUrl.replace(/^http/, "ws") + "/subscriptions";
 
   return new Promise((resolve, reject) => {
@@ -178,69 +324,25 @@ function fetchDiagramData(
       }
 
       if (msg.type === "data") {
+        if (msg.payload?.errors?.length) {
+          clearTimeout(timer);
+          ws.close();
+          reject(
+            new Error(
+              `[lib/syson] diagram subscription error: ${
+                JSON.stringify(msg.payload.errors)
+              }`,
+            ),
+          );
+          return;
+        }
         const payload = msg.payload?.data?.diagramEvent;
         if (payload?.__typename === "DiagramRefreshedEventPayload") {
           clearTimeout(timer);
           ws.send(JSON.stringify({ id: "snap", type: "stop" }));
           ws.close();
 
-          const d = payload.diagram;
-          const layoutMap = new Map<
-            string,
-            { x: number; y: number; w: number; h: number }
-          >();
-          for (const l of d.layoutData.nodeLayoutData) {
-            layoutMap.set(l.id, {
-              x: l.position.x,
-              y: l.position.y,
-              w: l.size.width,
-              h: l.size.height,
-            });
-          }
-
-          // Build child → top-level parent mapping (recursive — edges reference borderNodes/childNodes)
-          const childToParent = new Map<string, string>();
-          for (const n of d.nodes) {
-            const topId = (n as Record<string, unknown>).id as string;
-            mapDiagramDescendants(
-              childToParent,
-              n as Record<string, unknown>,
-              topId,
-            );
-          }
-
-          // Only top-level nodes (skip childNodes compartments)
-          const nodes: DiagramNode[] = d.nodes.map(
-            (n: Record<string, unknown>) => {
-              const layout = layoutMap.get(n.id as string);
-              return {
-                id: n.id as string,
-                label: (n.insideLabel as { text: string } | null)?.text ?? "",
-                x: layout?.x ?? 0,
-                y: layout?.y ?? 0,
-                width: layout?.w ?? (n.defaultWidth as number) ?? 150,
-                height: layout?.h ?? (n.defaultHeight as number) ?? 60,
-              };
-            },
-          );
-
-          const edges: DiagramEdge[] = d.edges.map((
-            e: Record<string, unknown>,
-          ) => ({
-            id: e.id as string,
-            sourceId: e.sourceId as string,
-            targetId: e.targetId as string,
-            label: (e.centerLabel as { text: string } | null)?.text,
-          }));
-
-          resolve({
-            nodes,
-            edges,
-            label: typeof d.metadata?.label === "string"
-              ? d.metadata.label
-              : "",
-            childToParent,
-          });
+          resolve(snapshotFromDiagram(payload.diagram));
         }
       }
 
@@ -305,122 +407,73 @@ export async function renderDiagramSvg(
     );
   }
 
-  // Build DOT source
-  const dotLines: string[] = [];
-  dotLines.push(`digraph "${esc(diagramLabel)}" {`);
-  dotLines.push(`  bgcolor="#0f0d1a"`);
-  dotLines.push(`  rankdir=TB`);
-  dotLines.push(`  pad=0.5`);
-  dotLines.push(`  nodesep=0.8`);
-  dotLines.push(`  ranksep=1.2`);
-  dotLines.push(
-    `  node [shape=box,style="filled,rounded",fillcolor="#1e1b4b",fontcolor="#e0e7ff",color="#6366f1",penwidth=2,fontname="sans-serif",fontsize=12,margin="0.3,0.15"]`,
-  );
-  dotLines.push(
-    `  edge [color="#818cf8",fontcolor="#a5b4fc",fontname="sans-serif",fontsize=10,penwidth=1.5]`,
-  );
-
-  // Title as invisible cluster
-  dotLines.push(`  labelloc=t`);
-  dotLines.push(
-    `  label=<<font color="#c4b5fd" point-size="14"><b>${
-      esc(diagramLabel)
-    }</b></font>>`,
-  );
-
-  // Pre-resolve edges (port borderNodes → parent part)
-  const nodeMap = new Map<string, DiagramNode>();
-  for (const n of nodes) nodeMap.set(n.id, n);
-
-  // Build name→id index for interface nodes (to use as intermediary)
-  const interfaceByName = new Map<string, string>();
-  for (const n of nodes) {
-    const lines = n.label.split("\n");
-    const stereotype = lines.length >= 2 ? lines[0] : "";
-    const name = lines.length >= 2 ? lines[1] : lines[0];
-    if (stereotype.includes("interface")) {
-      interfaceByName.set(name, n.id);
+  // Explicit graphical IDs bind returned groups to the original model data.
+  // Keep every node and relationship: parallel edges have distinct identities.
+  const quote = (value: string) => JSON.stringify(value);
+  const dotLines = [
+    `digraph ${quote(diagramLabel)} {`,
+    `graph [bgcolor="#0f0d1a",rankdir=TB]`,
+    `node [shape=box,style="rounded,filled",fillcolor="#1e1b4b",fontcolor="#e0e7ff",color="#818cf8"]`,
+    `edge [color="#a5b4fc",fontcolor="#a5b4fc"]`,
+  ];
+  const nodeIds = new Map(nodes.map((node, index) => [node.id, `n${index}`]));
+  const graphical = new Map<
+    string,
+    {
+      kind: "node" | "edge";
+      id: string;
+      targetObjectId?: string;
+      label: string;
     }
-  }
-
-  const resolvedEdges: { src: string; tgt: string; label?: string }[] = [];
-  const connectedNodeIds = new Set<string>();
-  const seen = new Set<string>();
-  for (const e of edges) {
-    const resolvedSrc = (childToParent?.get(e.sourceId)) ??
-      (nodeMap.has(e.sourceId) ? e.sourceId : undefined);
-    const resolvedTgt = (childToParent?.get(e.targetId)) ??
-      (nodeMap.has(e.targetId) ? e.targetId : undefined);
-    if (!resolvedSrc || !resolvedTgt || resolvedSrc === resolvedTgt) continue;
-
-    // Route through matching interface node: Part A → Interface → Part B
-    const ifaceId = e.label ? interfaceByName.get(e.label) : undefined;
-    if (ifaceId) {
-      const d1 = `${resolvedSrc}->${ifaceId}`;
-      const d2 = `${ifaceId}->${resolvedTgt}`;
-      if (!seen.has(d1)) {
-        seen.add(d1);
-        resolvedEdges.push({ src: resolvedSrc, tgt: ifaceId });
-      }
-      if (!seen.has(d2)) {
-        seen.add(d2);
-        resolvedEdges.push({ src: ifaceId, tgt: resolvedTgt });
-      }
-      connectedNodeIds.add(resolvedSrc);
-      connectedNodeIds.add(ifaceId);
-      connectedNodeIds.add(resolvedTgt);
-    } else {
-      const dedup = `${resolvedSrc}->${resolvedTgt}:${e.label ?? ""}`;
-      if (!seen.has(dedup)) {
-        seen.add(dedup);
-        resolvedEdges.push({
-          src: resolvedSrc,
-          tgt: resolvedTgt,
-          label: e.label,
-        });
-        connectedNodeIds.add(resolvedSrc);
-        connectedNodeIds.add(resolvedTgt);
-      }
-    }
-  }
-
-  // Emit nodes — skip orphan nodes only when there ARE edges in the diagram
-  const hasEdges = resolvedEdges.length > 0;
-  for (const n of nodes) {
-    const lines = n.label.split("\n");
-    const stereotype = lines.length >= 2 ? lines[0] : "";
-    const name = lines.length >= 2 ? lines[1] : lines[0];
-    const isInterface = stereotype.includes("interface");
-
-    if (hasEdges && !connectedNodeIds.has(n.id)) continue; // skip orphans only when diagram has edges
-
-    const nodeId = `n_${n.id.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    if (isInterface) {
+  >();
+  nodes.forEach((node, index) => {
+    const svgId = `syson_node_${index}`;
+    graphical.set(svgId, {
+      kind: "node",
+      id: node.id,
+      targetObjectId: node.targetObjectId,
+      label: node.label,
+    });
+    dotLines.push(
+      `${nodeIds.get(node.id)} [id=${quote(svgId)},label=${
+        quote(node.label || node.id)
+      }]`,
+    );
+  });
+  edges.forEach((edge, index) => {
+    // Old callers may supply only top-level nodes and a descendant map.
+    let source = nodeIds.get(edge.sourceId) ??
+      nodeIds.get(childToParent?.get(edge.sourceId) ?? "");
+    let target = nodeIds.get(edge.targetId) ??
+      nodeIds.get(childToParent?.get(edge.targetId) ?? "");
+    if (!source) {
+      source = `missing_source_${index}`;
       dotLines.push(
-        `  ${nodeId} [label=<<font point-size="9" color="#a5b4fc">${
-          esc(stereotype)
-        }</font><br/><b>${
-          esc(name)
-        }</b>>,shape=diamond,style="filled",fillcolor="#1a1a2e",color="#818cf8",penwidth=1.5,margin="0.2,0.1"]`,
-      );
-    } else {
-      dotLines.push(
-        `  ${nodeId} [label=<<font point-size="9" color="#a5b4fc">${
-          esc(stereotype)
-        }</font><br/><b>${esc(name)}</b>>]`,
+        `${source} [label=${quote("Unavailable endpoint: " + edge.sourceId)}]`,
       );
     }
-  }
-
-  // Emit edges
-  for (const re of resolvedEdges) {
-    const srcDotId = `n_${re.src.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const tgtDotId = `n_${re.tgt.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const labelAttr = re.label ? `label="${esc(re.label)}"` : "";
-    dotLines.push(`  ${srcDotId} -> ${tgtDotId} [${labelAttr}]`);
-  }
-
-  dotLines.push(`}`);
+    if (!target) {
+      target = `missing_target_${index}`;
+      dotLines.push(
+        `${target} [label=${quote("Unavailable endpoint: " + edge.targetId)}]`,
+      );
+    }
+    const svgId = `syson_edge_${index}`;
+    graphical.set(svgId, {
+      kind: "edge",
+      id: edge.id,
+      targetObjectId: edge.targetObjectId,
+      label: edge.label ?? "",
+    });
+    dotLines.push(
+      `${source} -> ${target} [id=${quote(svgId)},label=${
+        quote(edge.label ?? "")
+      },taillabel=${quote(edge.beginLabel ?? "")},headlabel=${
+        quote(edge.endLabel ?? "")
+      }]`,
+    );
+  });
+  dotLines.push("}");
   const dot = dotLines.join("\n");
 
   try {
@@ -432,7 +485,40 @@ export async function renderDiagramSvg(
     if (!resp.ok) {
       throw new Error(`Kroki returned ${resp.status}: ${await resp.text()}`);
     }
-    return { svg: await resp.text(), renderer: "external" };
+    const externalSvg = await resp.text();
+    // Never accept semantic metadata supplied by the renderer. Only annotate
+    // Graphviz groups whose explicit graphical ID belongs to this request.
+    const clean = externalSvg.replace(
+      /\sdata-(?:node-id|edge-id|target-object-id|label)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
+      "",
+    );
+    const annotated = new Set<string>();
+    const svg = clean.replace(/<g\b[^>]*>/gi, (group) => {
+      const id = /\sid\s*=\s*["']([^"']+)["']/i.exec(group)?.[1];
+      const original = id ? graphical.get(id) : undefined;
+      if (!original) return group;
+      annotated.add(id!);
+      const attributes = ` data-${original.kind}-id="${
+        esc(original.id)
+      }" data-label="${esc(original.label)}"${
+        original.targetObjectId
+          ? ` data-target-object-id="${esc(original.targetObjectId)}"`
+          : ""
+      }`;
+      return group.replace(
+        /\s*\/?\s*>$/,
+        (ending) => attributes + (ending.includes("/") ? "/>" : ">"),
+      );
+    });
+    if (annotated.size !== graphical.size) {
+      return localDiagramSvg(
+        nodes,
+        edges,
+        diagramLabel,
+        "External renderer omitted graphical identity groups; returned a local SVG to preserve element selection.",
+      );
+    }
+    return { svg, renderer: "external" };
   } catch (err) {
     const detail = (err as Error).message;
     console.error(
@@ -447,48 +533,17 @@ export async function renderDiagramSvg(
   }
 }
 
-/** A bounded local fallback: it never serialises raw DOT or contacts a host. */
+/** Local topology renderer; native coordinates are retained when supplied. */
 function localDiagramSvg(
   nodes: DiagramNode[],
   edges: DiagramEdge[],
   diagramLabel: string,
   rendererWarning: string,
 ): SvgRenderResult {
-  const visibleNodes = nodes.slice(0, 12);
-  const width = 760;
-  const rowHeight = 44;
-  const height = 132 + visibleNodes.length * rowHeight;
-  const labels = visibleNodes.map((node, index) => {
-    const y = 104 + index * rowHeight;
-    return `<rect x="28" y="${
-      y - 22
-    }" width="704" height="32" rx="6" fill="#1e1b4b" stroke="#6366f1"/>
-      <text x="44" y="${y}" font-family="sans-serif" font-size="13" fill="#e0e7ff">${
-      esc(node.label || node.id)
-    }</text>`;
-  }).join("\n");
-  const omitted = nodes.length - visibleNodes.length;
-  const overflow = omitted > 0
-    ? `<text x="28" y="${
-      height - 18
-    }" font-family="sans-serif" font-size="12" fill="#a5b4fc">${omitted} additional node${
-      omitted === 1 ? "" : "s"
-    } omitted from local preview.</text>`
-    : "";
-
   return {
     renderer: "local",
     rendererWarning,
-    svg:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect width="100%" height="100%" fill="#0f0d1a" rx="8"/>
-      <text x="28" y="34" font-family="sans-serif" font-size="16" font-weight="bold" fill="#e0e7ff">${
-        esc(diagramLabel)
-      }</text>
-      <text x="28" y="60" font-family="sans-serif" font-size="12" fill="#a5b4fc">Local fallback: ${nodes.length} nodes, ${edges.length} edges.</text>
-      ${labels}
-      ${overflow}
-    </svg>`,
+    svg: renderLocalTopology(nodes, edges, diagramLabel),
   };
 }
 
@@ -524,7 +579,10 @@ export const diagramTools: SysonTool[] = [
     handler: async ({ editing_context_id }) => {
       const client = getSysonClient();
       const data = await client.query<ListRepresentationsResult>(
-        LIST_REPRESENTATIONS,
+        LIST_REPRESENTATIONS.replace(
+          "id label kind",
+          "id label kind description { id label }",
+        ),
         { editingContextId: editing_context_id as string },
       );
 
@@ -534,13 +592,53 @@ export const diagramTools: SysonTool[] = [
             id: e.node.id,
             label: e.node.label,
             kind: e.node.kind,
+            description: (e.node as typeof e.node & {
+              description?: { id: string; label: string };
+            }).description,
           }),
         );
 
-      return { representations, count: representations.length };
+      return {
+        editingContextId: editing_context_id,
+        representations,
+        count: representations.length,
+      };
     },
   },
 
+  {
+    name: "syson_diagram_types",
+    description:
+      "Read available native representation types for an element, including diagram and table views. Does not create a representation.",
+    category: "diagram",
+    inputSchema: {
+      type: "object",
+      properties: {
+        editing_context_id: { type: "string" },
+        element_id: { type: "string" },
+      },
+      required: ["editing_context_id", "element_id"],
+    },
+    handler: async ({ editing_context_id, element_id }) => {
+      const data = await getSysonClient().query<
+        GetRepresentationDescriptionsResult
+      >(GET_REPRESENTATION_DESCRIPTIONS, {
+        editingContextId: editing_context_id as string,
+        objectId: element_id as string,
+      });
+      const availableTypes = data.viewer.editingContext
+        .representationDescriptions.edges.map(({ node }) => ({
+          ...node,
+          category: /table/i.test(node.label) ? "table" : "diagram",
+        }));
+      return {
+        editingContextId: editing_context_id,
+        elementId: element_id,
+        availableTypes,
+        count: availableTypes.length,
+      };
+    },
+  },
   // --------------------------------------------------------------------------
   // syson_diagram_create
   // --------------------------------------------------------------------------
@@ -809,7 +907,10 @@ export const diagramTools: SysonTool[] = [
       "Render a diagram as SVG. Shows parts, interfaces, and connections " +
       "with a dark-themed layout. Rendering is local by default. An operator may " +
       "explicitly configure SYSON_KROKI_URL for an external renderer; the result " +
-      "then identifies that external path. Call after syson_diagram_arrange for best results.",
+      "then identifies that external path. Call after syson_diagram_arrange for best results. " +
+      "Structured `nodes` and `edges` hold only what SysON shows: hidden elements are left out " +
+      "and counted in `hiddenNodeCount` / `hiddenEdgeCount`. Nodes nested in a free-form " +
+      "compartment have kind `node`; edges carry SysON's `style` (line and arrows).",
     category: "diagram",
     inputSchema: {
       type: "object",
@@ -838,7 +939,15 @@ export const diagramTools: SysonTool[] = [
       const ecId = editing_context_id as string;
       const diagId = diagram_id as string;
 
-      const { nodes, edges, label, childToParent } = await fetchDiagramData(
+      const {
+        nodes,
+        edges,
+        label,
+        childToParent,
+        targetObjectId,
+        metadata,
+        hidden,
+      } = await fetchDiagramData(
         baseUrl,
         ecId,
         diagId,
@@ -852,16 +961,18 @@ export const diagramTools: SysonTool[] = [
 
       const result = {
         diagramId: diagId,
+        editingContextId: ecId,
+        targetObjectId,
+        metadata,
         diagramLabel: label,
         nodeCount: nodes.length,
         edgeCount: edges.length,
-        nodes: nodes.map((n) => ({ id: n.id, label: n.label })),
-        edges: edges.map((e) => ({
-          id: e.id,
-          sourceId: e.sourceId,
-          targetId: e.targetId,
-          label: e.label,
-        })),
+        ...((hidden.nodes || hidden.edges) && {
+          hiddenNodeCount: hidden.nodes,
+          hiddenEdgeCount: hidden.edges,
+        }),
+        nodes,
+        edges,
         svg: rendered.svg,
         renderer: rendered.renderer,
         ...(rendered.rendererWarning &&

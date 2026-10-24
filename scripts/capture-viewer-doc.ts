@@ -1,9 +1,10 @@
 /// <reference lib="deno.ns" />
 
 /**
- * Capture docs/images/mcp-syson-requirements-viewer.png from the committed
- * viewer bundle through the documentation harness, so the README image is
- * reproducible: same fixture, same handshake, same viewport, headless Chrome.
+ * Capture the README images (docs/images/mcp-syson-requirements-viewer.png and
+ * docs/images/mcp-syson-diagram-viewer.png) from the committed viewer bundles
+ * through the documentation harness, so they are reproducible: same fixture,
+ * same handshake, same viewport, headless Chrome.
  * Two runs agree on layout and text; Chrome's rasterizer still drifts by one
  * luma level on a few anti-aliased pixels, so the bytes are not identical.
  *
@@ -15,8 +16,21 @@
 const scriptDir = new URL(".", import.meta.url).pathname;
 const root = await Deno.realPath(scriptDir.replace(/\/scripts\/$/, ""));
 const harnessPath = "/docs/fixtures/viewer-preview.html";
-const outputPath = `${root}/docs/images/mcp-syson-requirements-viewer.png`;
-const WINDOW = { width: 900, height: 720 };
+/** One image per committed fixture; `view` selects it in the harness. */
+const TARGETS = [
+  {
+    view: "requirements",
+    bundle: "requirements-viewer",
+    image: "mcp-syson-requirements-viewer",
+    window: { width: 900, height: 720 },
+  },
+  {
+    view: "diagram",
+    bundle: "diagram-viewer",
+    image: "mcp-syson-diagram-viewer",
+    window: { width: 900, height: 1240 },
+  },
+] as const;
 /** Chrome and ffmpeg both finish in seconds; a deadline keeps a stuck one from hanging. */
 const TOOL_DEADLINE_MS = 60_000;
 
@@ -29,7 +43,7 @@ const CONTENT_TYPES: Record<string, string> = {
 
 for (
   const required of [
-    "src/ui/dist/requirements-viewer/index.html",
+    ...TARGETS.map((target) => `src/ui/dist/${target.bundle}/index.html`),
     harnessPath.slice(1),
   ]
 ) {
@@ -64,9 +78,6 @@ const server = Deno.serve(
 );
 
 const port = await listening;
-// The raw frame lands next to the output so the task only needs docs/images writable.
-const rawScreenshot =
-  `${root}/docs/images/.mcp-syson-requirements-viewer.raw.png`;
 try {
   await Deno.mkdir(`${root}/docs/images`, { recursive: true });
   const chrome = await findExecutable(
@@ -79,53 +90,61 @@ try {
     ],
     "CHROME_BIN",
   );
-  await run(chrome, [
-    "--headless=new",
-    "--disable-background-networking",
-    "--disable-gpu",
-    "--force-color-profile=srgb",
-    "--force-device-scale-factor=2",
-    "--hide-scrollbars",
-    // Locale-sensitive formatting must not follow the capturing machine.
-    "--lang=en-US",
-    "--run-all-compositor-stages-before-draw",
-    "--timeout=8000",
-    "--virtual-time-budget=8000",
-    `--window-size=${WINDOW.width},${WINDOW.height}`,
-    `--screenshot=${rawScreenshot}`,
-    `http://127.0.0.1:${port}${harnessPath}`,
-  ]);
   const ffmpeg = await findExecutable([
     Deno.env.get("FFMPEG_BIN"),
     "/opt/homebrew/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
     "/usr/bin/ffmpeg",
   ]).catch(() => undefined);
-  if (ffmpeg) {
-    await run(ffmpeg, [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-i",
-      rawScreenshot,
-      "-compression_level",
-      "9",
-      "-pred",
-      "mixed",
-      outputPath,
-    ]);
-  } else {
-    await Deno.copyFile(rawScreenshot, outputPath);
+  for (const target of TARGETS) {
+    const outputPath = `${root}/docs/images/${target.image}.png`;
+    // The raw frame lands next to the output so the task only needs docs/images writable.
+    const rawScreenshot = `${root}/docs/images/.${target.image}.raw.png`;
+    try {
+      await run(chrome, [
+        "--headless=new",
+        "--disable-background-networking",
+        "--disable-gpu",
+        "--force-color-profile=srgb",
+        "--force-device-scale-factor=2",
+        "--hide-scrollbars",
+        // Locale-sensitive formatting must not follow the capturing machine.
+        "--lang=en-US",
+        "--run-all-compositor-stages-before-draw",
+        "--timeout=8000",
+        "--virtual-time-budget=8000",
+        `--window-size=${target.window.width},${target.window.height}`,
+        `--screenshot=${rawScreenshot}`,
+        `http://127.0.0.1:${port}${harnessPath}?view=${target.view}`,
+      ]);
+      if (ffmpeg) {
+        await run(ffmpeg, [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          rawScreenshot,
+          "-compression_level",
+          "9",
+          "-pred",
+          "mixed",
+          outputPath,
+        ]);
+      } else {
+        await Deno.copyFile(rawScreenshot, outputPath);
+      }
+      const { size } = await Deno.stat(outputPath);
+      console.log(
+        `[docs:viewer-screenshot] wrote ${outputPath} (${
+          (size / 1024).toFixed(1)
+        } KiB)`,
+      );
+    } finally {
+      await Deno.remove(rawScreenshot).catch(() => {});
+    }
   }
-  const { size } = await Deno.stat(outputPath);
-  console.log(
-    `[docs:viewer-screenshot] wrote ${outputPath} (${
-      (size / 1024).toFixed(1)
-    } KiB)`,
-  );
 } finally {
-  await Deno.remove(rawScreenshot).catch(() => {});
   await server.shutdown();
 }
 

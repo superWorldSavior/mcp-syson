@@ -1,11 +1,15 @@
 import { assertEquals } from "@std/assert";
 import {
   adaptRequirementsRecordedContent,
+  isDiagramSnapshot,
   isRequirementsCaptureReadModel,
   isRequirementsTrace,
 } from "../src/ui/shared/recorded-content.ts";
 import { parseSysonRecordedViewSession } from "../src/ui/shared/recorded-session.ts";
-import { buildRequirementsSession } from "../scripts/build-viewer-fixtures.ts";
+import {
+  buildDiagramSession,
+  buildRequirementsSession,
+} from "../scripts/build-viewer-fixtures.ts";
 
 Deno.test(
   "requirements-session.json is accepted by parseSysonRecordedViewSession with the viewer's validate/adapt pair",
@@ -99,3 +103,23 @@ Deno.test(
     );
   },
 );
+
+Deno.test("diagram-session.json is the committed state machine, accepted by the diagram viewer", async () => {
+  const committed = JSON.parse(
+    await Deno.readTextFile(
+      new URL("../docs/fixtures/diagram-session.json", import.meta.url)
+        .pathname,
+    ),
+  );
+  assertEquals(committed, await buildDiagramSession());
+  const parsed = await parseSysonRecordedViewSession(
+    "diagram",
+    committed,
+    isDiagramSnapshot,
+  );
+  assertEquals(parsed !== undefined, true, "fixture should parse successfully");
+  assertEquals(
+    (parsed?.structuredContent as { diagramLabel?: string }).diagramLabel,
+    "FlightModes state transition",
+  );
+});

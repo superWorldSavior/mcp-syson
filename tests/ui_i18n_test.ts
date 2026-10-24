@@ -8,13 +8,6 @@ import {
   SYSON_MESSAGES_FR,
 } from "../src/ui/shared/messages.ts";
 
-const AUDITED_COMPONENTS_COMMIT = "b08802df353bb25d25a1c8d64b22ea61b5287ae0";
-const RETIRED_COMPONENTS_COMMITS = [
-  "f9cb8493edfd555c58b9fc6f5601fe444fc78046",
-  "59eeb37",
-  "342c1b7456c011d3f21cad988f9dde23bcbecae0",
-] as const;
-
 Deno.test("interface dictionaries cover English and French with the same keys", () => {
   assertEquals(
     Object.keys(SYSON_MESSAGES_FR).sort(),
@@ -71,9 +64,9 @@ Deno.test("missing and invalid locales fall back to English without throwing", (
   assertEquals(compareText("b", "a", "not a locale") > 0, true);
 });
 
-Deno.test("audited kit provenance is components 0.9.0 at b08802d", async () => {
-  const split = await Deno.readTextFile(
-    new URL("../src/ui/split-modules.mjs", import.meta.url),
+Deno.test("published kit versions replace local split provenance", async () => {
+  const packages = JSON.parse(
+    await Deno.readTextFile(new URL("../src/ui/package.json", import.meta.url)),
   );
   const verify = await Deno.readTextFile(
     new URL("../scripts/verify-ui-bundles.ts", import.meta.url),
@@ -94,30 +87,13 @@ Deno.test("audited kit provenance is components 0.9.0 at b08802d", async () => {
     ),
   );
 
-  assertEquals(split.includes('version: "0.9.0"'), true);
-  assertEquals(split.includes('version: "0.9.3"'), true);
-  assertEquals(split.includes('version: "0.1.0"'), true);
-  assertEquals(split.includes('version: "0.8.0"'), false);
-  assertEquals(split.includes("0.7.1"), false);
-  assertEquals(
-    verify.includes(
-      "@casys/mcp-view@0.9.3 + @casys/mcp-view-contracts@0.1.0 + @casys/mcp-view-components@0.9.0",
-    ),
-    true,
-  );
-  assertEquals(verify.includes("@casys/mcp-view-components@0.8.0"), false);
-  assertEquals(workflow.includes(`ref: ${AUDITED_COMPONENTS_COMMIT}`), true);
-  assertEquals(
-    workflow.split(AUDITED_COMPONENTS_COMMIT).length - 1,
-    2,
-  );
-  for (const retired of RETIRED_COMPONENTS_COMMITS) {
-    assertEquals(workflow.includes(retired), false);
-  }
-  assertEquals(docs.includes("@casys/mcp-view-components@0.9.0"), true);
-  assertEquals(docs.includes("@casys/mcp-view@0.9.3"), true);
-  assertEquals(docs.includes("@casys/mcp-view-contracts@0.1.0"), true);
-  assertEquals(docs.includes(AUDITED_COMPONENTS_COMMIT), true);
+  assertEquals(packages.dependencies["@mcpview/view"], "0.11.0");
+  assertEquals(packages.dependencies["@mcpview/components"], "0.12.0");
+  assertEquals(packages.dependencies["@mcpview/contracts"], "0.2.0");
+  assertEquals(verify.includes("local split provenance"), false);
+  assertEquals(workflow.includes("MCP_VIEW_MODULE"), false);
+  assertEquals(workflow.includes(".deps/mcp-server"), false);
+  assertEquals(docs.includes("@mcpview/components@0.12.0"), true);
   assertEquals(
     adapter.includes("documentLanguage: sysonMessages.locale"),
     true,
@@ -135,6 +111,5 @@ Deno.test("audited kit provenance is components 0.9.0 at b08802d", async () => {
   );
   assertEquals(adapter.includes("mcpViewMessages(host.locale)"), false);
   assertEquals(trace.includes('t("noRequirements")'), true);
-  assertEquals(trace.includes('t("noModeRequirements", { mode })'), true);
-  assertEquals(trace.includes("Aucune exigence all"), false);
+  assertEquals(trace.includes('t("noGaps")'), true);
 });

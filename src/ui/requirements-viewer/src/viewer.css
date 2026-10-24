@@ -1,0 +1,16 @@
+/* Authored requirements: the row's trailing slot reads the authored limit. */
+
+.syson-req-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The kit's hairline before the limit separates it from the row text. */
+.syson-req-trailing .mcp-view-element-limit {
+  padding-inline-start: 10px;
+}
+.syson-req-trailing .mcp-view-element-limit-value {
+  color: var(--mcp-view-text, #101519);
+}

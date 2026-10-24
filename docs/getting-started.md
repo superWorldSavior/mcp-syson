@@ -41,14 +41,14 @@ docker compose up -d
 HTTP is the default transport:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server
+deno run -A jsr:@casys/mcp-syson@0.9.0/server
 ```
 
 The default endpoint is <http://127.0.0.1:3009/mcp>. Both forms of each CLI
 option are accepted:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server \
+deno run -A jsr:@casys/mcp-syson@0.9.0/server \
   --hostname 127.0.0.1 \
   --port 3009
 ```
@@ -62,7 +62,7 @@ reverse proxy.
 Use stdio when an MCP client launches one provider process:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server --stdio
+deno run -A jsr:@casys/mcp-syson@0.9.0/server --stdio
 ```
 
 `--stdio` cannot be combined with `--port` or `--hostname`. It uses the same
@@ -75,11 +75,11 @@ The published image contains this provider and `z3`, not SysON or PostgreSQL:
 ```bash
 docker run --rm --publish 127.0.0.1:3009:3009 \
   --env SYSON_URL=http://host.docker.internal:8180 \
-  ghcr.io/casys-ai/mcp-syson:v0.8.7
+  ghcr.io/superworldsavior/mcp-syson:v0.9.0
 ```
 
 For deployment, resolve and pin the immutable index digest attached to the
-[GitHub release](https://github.com/Casys-AI/mcp-syson/releases). The release
+[GitHub release](https://github.com/superWorldSavior/mcp-syson/releases). The release
 workflow builds amd64 and arm64 images, emits provenance and an SBOM, then
 smokes both HTTP and stdio before publishing the JSR package.
 
@@ -88,7 +88,7 @@ smokes both HTTP and stdio before publishing the JSR package.
 An operator can expose only the provider areas needed by a host:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server \
+deno run -A jsr:@casys/mcp-syson@0.9.0/server \
   --categories project,element,query
 ```
 
@@ -147,7 +147,7 @@ warning; read the project again before a model write.
 | `MCP_AUTH_RESOURCE_METADATA_URL` | no                | Public protected-resource metadata URL.                                                     |
 
 Authentication parsing and validation are owned by
-[`@casys/mcp-server`](https://github.com/Casys-AI/mcp-server). Keep credentials
+[`@mcpview/server`](https://github.com/Casys-AI/mcp-server). Keep credentials
 outside source control.
 
 ## Diagram renderer privacy

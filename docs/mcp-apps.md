@@ -35,6 +35,60 @@ The App registers its result and session handlers before connecting to the host.
 This prevents an early notification from being lost during the MCP Apps
 handshake.
 
+## Navigation and selection contract
+
+For a task-oriented workflow, see
+[Browse model elements and diagram views](how-to/browse-model-views.md).
+
+The model explorer uses the kit `PathBar`, `TreeList` and `DrillHint`
+components. Opening a real listed element calls `syson_element_children` on the
+originating provider. `editingContextId` is an optional addition to the children
+payload; older payloads remain displayable but cannot initiate that live read.
+The path retains earlier levels and their filters and scroll positions. Empty
+children, loading, rejected results and read failures remain explicit. Responses
+from a superseded root or abandoned level cannot replace the current branch.
+
+Model and diagram selection uses provider element identities. Click toggles an
+item; double-click and Enter inspect while preserving the preceding selection.
+Space toggles items in the model explorer. In diagrams, holding Space while
+dragging temporarily pans the canvas; releasing Space restores the chosen mode.
+Inspection does not implicitly select. The basket belongs to the viewer root and
+survives local navigation and language changes. A new root invalidates old
+handlers and queues an empty context replacement. Diagram Select mode adds fully
+enclosed primary diagram blocks (parts in an architecture view) through a
+background selection rectangle. Internal rows, ports and relationships remain
+available through individual clicks; Pan mode moves the canvas.
+
+The local preview reuses MCP View's `ActiveContextChip` for the compact context
+signal, remove controls and selection popover. `SelectionBasket` only adapts the
+SysON controller and localized labels to that component. Decorative compartments
+that repeat their parent's semantic identity are not independent selection
+targets. Native text selection and SVG dragging are disabled inside the canvas;
+text in the surrounding panels remains selectable.
+
+The diagram chooser separates existing representations (`syson_diagram_list`)
+from available native types for its target (`syson_diagram_types`). A type is
+availability information, not an existing or newly created view. Only existing
+diagram representations are opened through `syson_diagram_snapshot`; table or
+other representations require an appropriate viewer and show that limitation.
+Snapshot data retains representation metadata, nested nodes and layout data when
+supplied. The subscription bounds child-node recursion to depth 8. Local SVG
+rendering approximates the native diagram using the supplied topology and
+coordinates; it does not reproduce every native style or editor interaction.
+Empty display compartments are omitted from the local projection; populated
+compartments keep their content. The original snapshot remains unchanged. Fit
+and zoom use a single transform of the SVG's intrinsic dimensions.
+
+Live navigation requires the host's `serverTools` capability plus the relevant
+editing-context identifier. Recorded sessions make no provider calls, including
+for element inspection or view discovery. Captured identities and summaries can
+still be selected for the host's context when that host supports updates. The
+basket reports unavailable, pending and rejected updates and provides remove,
+clear and retry actions. Each update replaces the complete context for that
+viewer, including an empty replacement when cleared. Acknowledgement means
+acceptance by the host for future turns; it proves neither model consumption nor
+an AI response. Selection does not send a conversational request.
+
 ## Recorded read-only sessions
 
 A recording host can reopen an exact result without calling the live provider.
@@ -84,25 +138,30 @@ rendered from the capture. Exact row identifiers stay behind a closed kit
 `Disclosure` so they remain inspectable without flooding the default surface.
 The viewer neither derives a measurement nor assigns a satisfaction verdict.
 Satisfaction-link coverage remains in the separate requirements-trace resource,
-which does not accept authored-limit captures. Its standalone surface is the
-kit `FocusedView`: one coverage visualization, critical status outside the
-collapsed details, and root identity plus optional trace/link inspection in
-that closed disclosure. The trace-list and satisfaction-link keys stay
-independently mountable and are not nested as a dashboard.
+which does not accept authored-limit captures. Its standalone surface is the kit
+`FocusedView`: one coverage visualization, critical status outside the collapsed
+details, and root identity plus optional trace/link inspection in that closed
+disclosure. The trace-list and satisfaction-link keys stay independently
+mountable and are not nested as a dashboard.
 
-The authored-requirements viewer ships a committed fixture and a documentation
-harness for reproducible README captures.
+The authored-requirements and diagram viewers ship committed fixtures and a
+documentation harness for reproducible README captures.
 `docs/fixtures/requirements-session.json` is a fully fingerprinted recorded
-session for the TPS03 StandBackrest capture, built deterministically by
-`deno task docs:viewer-fixtures` (`scripts/build-viewer-fixtures.ts`).
-`docs/fixtures/viewer-preview.html` is a minimal host harness that loads the
-fixture and drives the App through the standard MCP UI handshake.
-`deno task docs:viewer-screenshot` (`scripts/capture-viewer-doc.ts`) serves both
-through a loopback server, captures a 900×720 headless-Chrome screenshot at 2×
-scale, and writes `docs/images/mcp-syson-requirements-viewer.png`. Re-running
-the two tasks after any viewer change produces a fresh PNG with the same layout
-and text without manual intervention (Chrome's rasterizer drifts by one luma
-level on a few anti-aliased pixels, so the bytes are not bit-identical).
+session for the TPS03 StandBackrest capture;
+`docs/fixtures/diagram-session.json` wraps the FlightModes state-machine
+snapshot recorded in `tests/fixtures/diagram-views/state-transition.json`. Both
+are built deterministically by `deno task docs:viewer-fixtures`
+(`scripts/build-viewer-fixtures.ts`). `docs/fixtures/viewer-preview.html` is a
+minimal host harness that loads one fixture (`?view=requirements` or
+`?view=diagram`), accepts context updates, and drives the App through the
+standard MCP UI handshake. `deno task docs:viewer-screenshot`
+(`scripts/capture-viewer-doc.ts`) serves them through a loopback server,
+captures headless-Chrome screenshots at 2× scale, and writes
+`docs/images/mcp-syson-requirements-viewer.png` (900×720) and
+`docs/images/mcp-syson-diagram-viewer.png` (900×1240). Re-running the two tasks
+after any viewer change produces fresh PNGs with the same layout and text
+without manual intervention (Chrome's rasterizer drifts by one luma level on a
+few anti-aliased pixels, so the bytes are not bit-identical).
 
 ## Component catalog
 
@@ -147,9 +206,9 @@ Example negotiated context:
 }
 ```
 
-Selectable domain rows emit named semantic selection events. The events carry
-provider identities; they do not perform writes or navigate the host by
-themselves.
+Model and diagram basket selections emit named semantic selection events after
+the context update is acknowledged. The events carry provider identities; they
+do not perform model writes or navigate the host by themselves.
 
 ## Package and bundle layout
 
@@ -161,29 +220,20 @@ the JSR module graph without evaluating unrelated HTML on each resource read.
 `server.ts` registers the generated HTML as MCP resources. Editing TSX without
 rebuilding leaves the served bundle stale.
 
-## Audited MCP View split
+## Published MCP View packages
 
-The viewer build intentionally has no fallback to the retired monolithic viewer
-package. It requires local file URLs for the audited split:
+Viewer builds resolve `@mcpview/view@0.11.0`, `@mcpview/components@0.12.0` and
+`@mcpview/contracts@0.2.0` directly from the npm lockfile. The server uses
+`@mcpview/server@0.30.0`. No sibling checkout or file-module environment
+variables are required. MCP Apps use ext-apps 2.x, the split MCP SDK v2 packages
+and Zod 4.2+.
 
-- `@casys/mcp-view@0.9.3` for the renderer-neutral lifecycle and router;
-- `@casys/mcp-view-contracts@0.1.0` for wire contracts;
-- `@casys/mcp-view-components@0.9.0` for catalogs, surfaces, theme, Preact
-  presentation, `FocusedView`/`Disclosure` and `createTranslator`.
-
-For a standard sibling `mcp-server` checkout:
-
-```bash
-export MCP_VIEW_MODULE=file:///absolute/path/to/mcp-server/packages/view/mod.ts
-export MCP_VIEW_COMPONENTS_MODULE=file:///absolute/path/to/mcp-server/packages/view-components/mod.ts
-```
-
-The resolver derives the contracts, Preact adapter and presentation entry points
-from those package exports. Alternate layouts may set
-`MCP_VIEW_CONTRACTS_MODULE`, `MCP_VIEW_COMPONENTS_PREACT_MODULE` and
-`MCP_VIEW_PRESENTATION_MODULE` explicitly. Every value must be a plain local
-`file:` URL exported by the expected package and version. CI checkouts the
-audited split at `b08802df353bb25d25a1c8d64b22ea61b5287ae0`.
+The published `/context` and `/preact/context` entries own acknowledged context
+state, serialized replacements, retries, click arbitration and the context chip.
+SysON maps semantic references and a graduated policy: compact fields for 1–3
+items, references for 4–8, and one `syson_query_eval` reproducer above eight.
+The query keeps the explicit editing context separate from the viewer root;
+recorded inputs without that context cannot fabricate a resolvable query.
 
 Interface labels, loading and empty copy, buttons, input names and `Intl`
 number/date formatting follow `context.hostContext.locale` through the kit

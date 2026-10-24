@@ -1,0 +1,282 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Validated \"Batmobile\": 0 pass, 0 fail, 10 error, 2 unresolved."
+    }
+  ],
+  "structuredContent": {
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "elementId": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+    "elementName": "Batmobile",
+    "scope": {
+      "kind": "element",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+      "rootId": "738907af-25b2-4240-83f9-ce0a58a41ac7"
+    },
+    "constraints": [
+      {
+        "constraintId": "4b64cde1-b2d3-4bb3-ac69-207960dd891f",
+        "constraintName": "ConstraintUsage",
+        "expression": "vehicle ≤ maxSpeed",
+        "status": "unresolved",
+        "unresolvedRefs": [
+          "vehicle"
+        ]
+      },
+      {
+        "constraintId": "f3ff384a-43da-42cd-b435-87704bab5790",
+        "constraintName": "AssertConstraintUsage",
+        "expression": "FeatureReferenceExpression == xEngine and FeatureReferenceExpression == FeatureReferenceExpression",
+        "status": "unresolved",
+        "unresolvedRefs": [
+          "FeatureReferenceExpression"
+        ]
+      },
+      {
+        "constraintId": "c256126b-9842-4f7b-aa67-440aedd940c8",
+        "constraintName": "RequirementUsage",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+        "constraintName": "batmobileSpecification",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+        "constraintName": "batmobileMaxSpeed",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+        "constraintName": "batmobileAcceleration",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "713b37a1-3e61-4179-aa43-d656b440135a",
+        "constraintName": "SatisfyRequirementUsage",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "e8780d44-8332-44e7-99f3-7a5865c9da68",
+        "constraintName": "Reduce the number of special parts",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "8f148a89-31e3-4270-8578-575ce6c51cbc",
+        "constraintName": "system components",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+        "constraintName": "Reduce the number of special parts",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "de49c028-35de-4860-9cef-c2257f9d5ffa",
+        "constraintName": "ConstraintUsage",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      },
+      {
+        "constraintId": "88cef9fb-0d31-4952-b9d9-de4d78a691ec",
+        "constraintName": "SatisfyRequirementUsage",
+        "status": "error",
+        "expression": "(unparsed)",
+        "error": "No body expression found"
+      }
+    ],
+    "diagnostics": [
+      {
+        "id": "constraint-error:c256126b-9842-4f7b-aa67-440aedd940c8",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "c256126b-9842-4f7b-aa67-440aedd940c8",
+          "label": "RequirementUsage"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+          "label": "batmobileSpecification"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+          "label": "batmobileMaxSpeed"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:7321d6c5-671a-489b-83e3-6fa1a2343b21",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+          "label": "batmobileAcceleration"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:713b37a1-3e61-4179-aa43-d656b440135a",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "713b37a1-3e61-4179-aa43-d656b440135a",
+          "label": "SatisfyRequirementUsage"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:e8780d44-8332-44e7-99f3-7a5865c9da68",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "e8780d44-8332-44e7-99f3-7a5865c9da68",
+          "label": "Reduce the number of special parts"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:8f148a89-31e3-4270-8578-575ce6c51cbc",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "8f148a89-31e3-4270-8578-575ce6c51cbc",
+          "label": "system components"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+          "label": "Reduce the number of special parts"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:de49c028-35de-4860-9cef-c2257f9d5ffa",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "de49c028-35de-4860-9cef-c2257f9d5ffa",
+          "label": "ConstraintUsage"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      },
+      {
+        "id": "constraint-error:88cef9fb-0d31-4952-b9d9-de4d78a691ec",
+        "severity": "error",
+        "message": "No body expression found",
+        "source": "constraint.error",
+        "constraint": {
+          "id": "88cef9fb-0d31-4952-b9d9-de4d78a691ec",
+          "label": "SatisfyRequirementUsage"
+        },
+        "element": {
+          "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+          "label": "Batmobile"
+        },
+        "attribution": "validation-scope"
+      }
+    ],
+    "summary": {
+      "total": 12,
+      "pass": 0,
+      "fail": 0,
+      "error": 10,
+      "unresolved": 2
+    },
+    "resolvedValues": {},
+    "validatedAt": "2026-10-24T02:32:01.428Z"
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/validation-viewer",
+      "emits": [
+        "syson.constraint.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.8.7"
+    }
+  },
+  "resultType": "complete"
+}

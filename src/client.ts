@@ -20,7 +20,7 @@ import {
 import { toElementInsertSysmlResult } from "./tools/element.ts";
 import { withAgentToolContract } from "./tools/agent-contract.ts";
 import { toSysonToolErrorResult } from "./tool-error.ts";
-import type { StructuredToolResult } from "@casys/mcp-server";
+import type { StructuredToolResult } from "@mcpview/server";
 import type {
   MCPClientBase,
   MCPTool,

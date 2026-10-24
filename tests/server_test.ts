@@ -213,7 +213,7 @@ Deno.test("SysON serves stateless HTTP with native structured agent contracts", 
       version?: unknown;
     };
     assertEquals(serverInfo.name, "mcp-syson");
-    assertEquals(serverInfo.version, "0.8.7");
+    assertEquals(serverInfo.version, "0.9.0");
     assertEquals(
       String(discovered.result.instructions).includes("syson_project_list"),
       true,
@@ -348,6 +348,19 @@ Deno.test("SysON serves stateless HTTP with native structured agent contracts", 
       (requirementsTrace?.outputSchema as { required?: unknown[] })?.required,
       ["rootId", "requirementsCount", "traces", "coverage"],
     );
+    const requirementsList = tools.find((tool) =>
+      tool.name === "syson_requirements_list"
+    );
+    assertEquals(
+      (requirementsList?._meta as { ui?: { resourceUri?: string } })?.ui
+        ?.resourceUri,
+      "ui://mcp-syson/requirements-viewer",
+    );
+    assertEquals(
+      (requirementsList?.annotations as { readOnlyHint?: boolean })
+        ?.readOnlyHint,
+      true,
+    );
     for (const tool of tools) {
       if (tool.name === "syson_query_aql" || tool.name === "syson_query_eval") {
         continue;
@@ -362,6 +375,7 @@ Deno.test("SysON serves stateless HTTP with native structured agent contracts", 
     for (
       const toolName of [
         "syson_search",
+        "syson_requirements_list",
         "syson_query_requirements_trace",
         "syson_diagram_list",
         "syson_diagram_create",

@@ -1,0 +1,156 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "SysON syson_requirements_list completed."
+    }
+  ],
+  "structuredContent": {
+    "kind": "live-requirements",
+    "rootId": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "scope": {
+      "kind": "element",
+      "rootId": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80"
+    },
+    "target": {
+      "id": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+      "kind": "siriusComponents://semantic?domain=sysml&entity=Package",
+      "label": "Batmobile"
+    },
+    "requirements": [
+      {
+        "id": "c256126b-9842-4f7b-aa67-440aedd940c8",
+        "name": "RequirementUsage",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementUsage",
+        "textStatus": "available",
+        "text": "* The driver wants to activate \n             * the rocket booster to increase \n             * the speed extremely.",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "id": "4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+        "name": "batmobileSpecification",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementUsage",
+        "textStatus": "unavailable",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "unavailable",
+        "authoredConstraints": {
+          "constraints": [],
+          "errors": [
+            {
+              "id": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+              "name": "batmobileMaxSpeed",
+              "error": "No body expression found"
+            },
+            {
+              "id": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+              "name": "batmobileAcceleration",
+              "error": "No body expression found"
+            }
+          ]
+        },
+        "authoredConstraintsError": "batmobileMaxSpeed: No body expression found; batmobileAcceleration: No body expression found"
+      },
+      {
+        "id": "a23c5f64-4039-4d8c-ac2b-867c1dc2b820",
+        "name": "batmobileMaxSpeed",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementUsage",
+        "textStatus": "unavailable",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "id": "7321d6c5-671a-489b-83e3-6fa1a2343b21",
+        "name": "batmobileAcceleration",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementUsage",
+        "textStatus": "unavailable",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "id": "e8780d44-8332-44e7-99f3-7a5865c9da68",
+        "name": "Reduce the number of special parts",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ConcernUsage",
+        "textStatus": "available",
+        "text": "* Reduce the number of special parts to reduce the dependency\n         * to special suppliers and experts.",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      },
+      {
+        "id": "8f148a89-31e3-4270-8578-575ce6c51cbc",
+        "name": "system components",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ViewpointUsage",
+        "textStatus": "unavailable",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "unavailable",
+        "authoredConstraints": {
+          "constraints": [],
+          "errors": [
+            {
+              "id": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+              "name": "Reduce the number of special parts",
+              "error": "No body expression found"
+            },
+            {
+              "id": "de49c028-35de-4860-9cef-c2257f9d5ffa",
+              "name": "ConstraintUsage",
+              "error": "No body expression found"
+            }
+          ]
+        },
+        "authoredConstraintsError": "Reduce the number of special parts: No body expression found; ConstraintUsage: No body expression found"
+      },
+      {
+        "id": "e591b9b5-a3a5-4f1f-abc6-bfb91fed9e0a",
+        "name": "Reduce the number of special parts",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ConcernUsage",
+        "textStatus": "unavailable",
+        "identifierStatus": "unavailable",
+        "coverageStatus": "unknown",
+        "authoredConstraintsStatus": "available",
+        "authoredConstraints": {
+          "constraints": [],
+          "message": "No ConstraintUsage found under this element"
+        }
+      }
+    ],
+    "count": 7
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/requirements-viewer",
+      "emits": [
+        "syson.requirement.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.8.7"
+    }
+  },
+  "resultType": "complete"
+}

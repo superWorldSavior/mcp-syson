@@ -50,7 +50,7 @@ export const VIEWER_DEFAULT_SURFACE_KEYS = {
   modelExplorer: ["syson.model.elements"],
   queryResults: ["syson.query.values"],
   requirements: ["syson.requirements.authored-list"],
-  requirementsTrace: ["syson.requirements.coverage"],
+  requirementsTrace: ["syson.requirements.trace-list"],
   validation: ["syson.validation.status"],
   value: ["syson.value.readout"],
 } as const;
@@ -60,7 +60,7 @@ export const SYSON_SEMANTIC_DOMAIN = "sysml" as const;
 type ComponentKey =
   typeof VIEWER_COMPONENT_KEYS[keyof typeof VIEWER_COMPONENT_KEYS][number];
 
-/** Structural surface shape; @casys/mcp-view-components validates and freezes it. */
+/** Structural surface shape; @mcpview/components validates and freezes it. */
 export function defaultComponentSurface(keys: readonly ComponentKey[]) {
   return {
     layout: { type: "stack" as const, gap: "sm" as const },

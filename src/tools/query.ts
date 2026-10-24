@@ -8,12 +8,18 @@
  */
 
 import type { SysonTool } from "./types.ts";
+import type {
+  AuthoredConstraints,
+  RequirementsTraceData,
+  RequirementTraceEntry,
+} from "../viewer-data.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { SEARCH_ELEMENTS } from "../api/queries.ts";
 import { evalAql, getChildren, getSelf } from "./aql.ts";
 import type { GqlObject, SearchResult } from "../api/types.ts";
 import { normalizeKind } from "../constraints/ast-parser.ts";
 import { readAttributeValue } from "../constraints/resolver.ts";
+import { constraintTools } from "./constraint.ts";
 
 // ============================================================================
 // syson_part_structure — product breakdown traversal
@@ -382,6 +388,8 @@ export const queryTools: SysonTool[] = [
         iconURLs: m.iconURLs ?? [],
       }));
       return {
+        editingContextId: editing_context_id,
+        scope: { kind: "selection", editingContextId: editing_context_id },
         query: text,
         results,
         count: results.length,
@@ -423,16 +431,50 @@ export const queryTools: SysonTool[] = [
     handler: async (
       { editing_context_id, expression, selected_object_ids },
     ) => {
+      const expr = expression as string;
+      const selectedIds = selected_object_ids as string[];
+      const metadata = {
+        editingContextId: editing_context_id,
+        scope: {
+          kind: "selection",
+          editingContextId: editing_context_id,
+          selectedObjectIds: [...new Set(selectedIds)],
+        },
+      };
+      // SysON binds self to only the first selected object. An identity-set
+      // reproducer must resolve every identity explicitly rather than claiming
+      // the upstream scalar is the complete selection.
+      if (expr.trim() === "aql:self" && selectedIds.length > 1) {
+        const results: Array<{ id: string; kind: string; label: string }> = [];
+        for (const id of new Set(selectedIds)) {
+          const element = await getSelf(editing_context_id as string, id);
+          if (!element || element.id !== id) {
+            throw new Error(`Selected element could not be resolved: ${id}`);
+          }
+          results.push({
+            id: element.id,
+            kind: element.kind,
+            label: element.label,
+          });
+        }
+        return {
+          ...metadata,
+          type: "objects",
+          expression: expr,
+          results,
+          count: results.length,
+        };
+      }
       const exprResult = await evalAql(
         editing_context_id as string,
-        expression as string,
-        selected_object_ids as string[],
+        expr,
+        selectedIds,
       );
 
-      const expr = expression as string;
       switch (exprResult.__typename) {
         case "ObjectExpressionResult":
           return {
+            ...metadata,
             type: "object",
             expression: expr,
             result: {
@@ -443,6 +485,7 @@ export const queryTools: SysonTool[] = [
           };
         case "ObjectsExpressionResult":
           return {
+            ...metadata,
             type: "objects",
             expression: expr,
             results: exprResult.objsValue.map((o) => ({
@@ -454,28 +497,38 @@ export const queryTools: SysonTool[] = [
           };
         case "StringExpressionResult":
           return {
+            ...metadata,
             type: "string",
             expression: expr,
             result: exprResult.strValue,
           };
         case "BooleanExpressionResult":
           return {
+            ...metadata,
             type: "boolean",
             expression: expr,
             result: exprResult.boolValue,
           };
         case "IntExpressionResult":
-          return { type: "int", expression: expr, result: exprResult.intValue };
+          return {
+            ...metadata,
+            type: "int",
+            expression: expr,
+            result: exprResult.intValue,
+          };
         case "VoidExpressionResult":
-          return { type: "void", expression: expr, result: null };
+          return { ...metadata, type: "void", expression: expr, result: null };
       }
     },
   },
 
   {
     name: "syson_query_requirements_trace",
-    description: "Trace requirements to their satisfying elements. " +
-      "Shows which parts satisfy which requirements, with coverage metrics.",
+    description:
+      "Trace requirements to explicit satisfying features within the requested root. " +
+      "Returns satisfaction relationship provenance and link coverage (not validation). " +
+      "Includes documentary authored constraints for the first 10 requirements; " +
+      "relationships outside the root are outside this query scope.",
     category: "query",
     inputSchema: {
       type: "object",
@@ -497,19 +550,23 @@ export const queryTools: SysonTool[] = [
         emits: ["syson.requirement.selected"],
       },
     },
-    handler: async ({ editing_context_id, root_id }) => {
+    handler: async (
+      { editing_context_id, root_id },
+    ): Promise<RequirementsTraceData> => {
       const ecId = editing_context_id as string;
       const rootId = root_id as string;
 
       // Find all RequirementUsage elements via evaluateExpression
       const reqResult = await evalAql(
         ecId,
-        "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::RequirementUsage))",
+        "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::RequirementUsage) and not e.oclIsKindOf(sysml::SatisfyRequirementUsage))",
         [rootId],
       );
 
       if (reqResult.__typename !== "ObjectsExpressionResult") {
         return {
+          editingContextId: ecId,
+          scope: { kind: "element", editingContextId: ecId, rootId },
           rootId,
           requirementsCount: 0,
           traces: [],
@@ -525,47 +582,173 @@ export const queryTools: SysonTool[] = [
 
       const requirements = reqResult.objsValue;
 
-      // For each requirement, find satisfy relationships
-      const traces = [];
-      for (const req of requirements) {
-        try {
-          const satisfyResult = await evalAql(
-            ecId,
-            "aql:self.ownedElement->select(e | e.oclIsKindOf(sysml::SatisfyRequirementUsage))",
-            [req.id],
+      // SysON v2026.7.0: SatisfyRequirementUsage is a relationship usage,
+      // not its satisfying part. Its derived accessors are implemented here:
+      // https://github.com/eclipse-syson/syson/blob/v2026.7.0/backend/metamodel/syson-sysml-metamodel/src/main/java/org/eclipse/syson/sysml/impl/SatisfyRequirementUsageImpl.java
+      // Search throughout the requested root, since the relationship can be
+      // owned by a satisfying feature rather than by the requirement.
+      type Identity = { id: string; label: string; kind: string };
+      type SatisfactionLink = {
+        relationship: Identity;
+        targets: Identity[];
+        status: "resolved" | "unresolved";
+        error?: string;
+      };
+      const linksByRequirement = new Map<string, SatisfactionLink[]>();
+      let discoveryError: string | undefined;
+      const identity = ({ id, label, kind }: GqlObject): Identity => ({
+        id,
+        label,
+        kind,
+      });
+      const readObjects = async (
+        id: string,
+        expression: string,
+        allowAbsent = false,
+      ): Promise<GqlObject[]> => {
+        const result = await evalAql(ecId, expression, [id]);
+        if (result.__typename === "ObjectsExpressionResult") {
+          return result.objsValue;
+        }
+        if (result.__typename === "ObjectExpressionResult") {
+          return [result.objValue];
+        }
+        if (allowAbsent && result.__typename === "VoidExpressionResult") {
+          return [];
+        }
+        throw new Error(`Unexpected relationship result: ${result.__typename}`);
+      };
+      try {
+        const relationships = await readObjects(
+          rootId,
+          "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::SatisfyRequirementUsage))",
+        );
+        for (const relationship of relationships) {
+          // Without its requirement identity the relationship cannot safely be
+          // attributed to any row; keep the entire scoped discovery unresolved.
+          const referenced = await readObjects(
+            relationship.id,
+            "aql:self.satisfiedRequirement",
+            true,
           );
+          if (referenced.length !== 1) {
+            throw new Error(
+              "Could not resolve a satisfaction relationship's requirement",
+            );
+          }
+          const requirementId = referenced[0].id;
+          if (
+            !requirements.some((requirement) =>
+              requirement.id === requirementId
+            )
+          ) continue;
+          let link: SatisfactionLink;
+          try {
+            const targets =
+              (await readObjects(relationship.id, "aql:self.satisfyingFeature"))
+                .map(identity);
+            link = targets.length
+              ? {
+                relationship: identity(relationship),
+                targets,
+                status: "resolved",
+              }
+              : {
+                relationship: identity(relationship),
+                targets: [],
+                status: "unresolved",
+                error:
+                  "Satisfaction relationship has no explicit satisfying feature",
+              };
+          } catch (error) {
+            link = {
+              relationship: identity(relationship),
+              targets: [],
+              status: "unresolved",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+          const links = linksByRequirement.get(requirementId) ?? [];
+          links.push(link);
+          linksByRequirement.set(requirementId, links);
+        }
+      } catch (error) {
+        discoveryError = `Could not resolve satisfy relationships: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
+      const traces = requirements.map<RequirementTraceEntry>((requirement) => {
+        const satisfactionLinks = linksByRequirement.get(requirement.id) ?? [];
+        const satisfiedBy = [
+          ...new Map(
+            satisfactionLinks.flatMap((link) => link.targets).map((
+              target,
+            ) => [target.id, target]),
+          ).values(),
+        ];
+        const unresolved = satisfactionLinks.find((link) =>
+          link.status === "unresolved"
+        );
+        const error = discoveryError ?? unresolved?.error;
+        return {
+          requirement: { id: requirement.id, label: requirement.label },
+          verificationStatus: "unknown",
+          satisfiedBy,
+          satisfactionLinks,
+          ...(error ? { error } : {}),
+        };
+      });
 
-          const satisfiedBy =
-            satisfyResult.__typename === "ObjectsExpressionResult"
-              ? satisfyResult.objsValue.map((s) => ({
-                id: s.id,
-                label: s.label,
-                kind: s.kind,
-              }))
-              : [];
-
-          traces.push({
-            requirement: { id: req.id, label: req.label },
-            satisfiedBy,
+      // Documentary extraction only: never resolve measurements or evaluate a limit.
+      // Cap enrichment independently of coverage; larger results remain navigable.
+      const extract = constraintTools.find((tool) =>
+        tool.name === "syson_constraint_extract"
+      )!;
+      const enrichedTraces: RequirementTraceEntry[] = [];
+      for (const [index, trace] of traces.entries()) {
+        if (index >= 10) {
+          enrichedTraces.push({
+            ...trace,
+            authoredConstraintsStatus: "not-requested",
           });
-        } catch {
-          traces.push({
-            requirement: { id: req.id, label: req.label },
-            satisfiedBy: [],
-            error: "Could not resolve satisfy relationships",
+          continue;
+        }
+        try {
+          const authoredConstraints = await extract.handler({
+            editing_context_id: ecId,
+            element_id: trace.requirement.id,
+          }) as AuthoredConstraints;
+          enrichedTraces.push({
+            ...trace,
+            authoredConstraintsStatus: "available",
+            authoredConstraints,
+          });
+        } catch (error) {
+          enrichedTraces.push({
+            ...trace,
+            authoredConstraintsStatus: "unavailable",
+            authoredConstraintsError: error instanceof Error
+              ? error.message
+              : String(error),
           });
         }
       }
 
-      const satisfied = traces.filter((t) => t.satisfiedBy.length > 0).length;
-      const unsatisfied =
-        traces.filter((t) => t.satisfiedBy.length === 0).length;
+      // A partial relationship read remains unresolved even when another link
+      // has an explicit target. Match the viewer's conservative row status.
+      const satisfied =
+        traces.filter((trace) =>
+          trace.error === undefined && trace.satisfiedBy.length > 0
+        ).length;
       const total = requirements.length;
+      const unsatisfied = total - satisfied;
 
       return {
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId },
         rootId,
         requirementsCount: total,
-        traces,
+        traces: enrichedTraces,
         coverage: {
           total,
           satisfied,

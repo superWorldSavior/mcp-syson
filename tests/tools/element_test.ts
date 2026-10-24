@@ -83,6 +83,8 @@ Deno.test("syson_element_children - returns children via AQL", async () => {
       element_id: "e1",
     }) as Record<string, unknown>;
     const children = result.children as Array<Record<string, unknown>>;
+    assertEquals(result.editingContextId, "ec-1");
+    assertEquals(result.parentId, "e1");
     assertEquals(children.length, 2);
     assertEquals(children[0].label, "Engine");
     assertEquals(children[1].label, "Frame");

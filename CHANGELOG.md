@@ -4,6 +4,74 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-25
+
+### Added
+
+- The diagram viewer draws SysON diagrams itself from the snapshot's nodes and
+  edges, for the General, Interconnection, Action Flow and State Transition
+  views:
+  - nested parts, actions and states inside their free-form regions, view frames
+    with a title tab, list compartments as rows;
+  - start, done and decision nodes, fork and join bars with their names, ports
+    with outside labels, parameters with their in/out direction;
+  - SysON's own edge notation (dashed successions with open heads, filled
+    item-flow heads, composition diamonds, specialization and typing triangles),
+    with the type-based marker as fallback;
+  - edges drawn under blocks; routed edges stay orthogonal; edge labels sit
+    clear of blocks and other labels; port labels on one side stack;
+  - three levels of detail (full blocks from 60 %, header only from 30 %, tinted
+    outlines below) with names at a constant on-screen size, a mini-map, zoom to
+    selection and a 35 % opening floor in reading order.
+- **Layout** in the diagram's "⋯" menu: SysON's positions (default) or an
+  automatic layout computed by ELK (layered, nested containers, orthogonal
+  routing), loaded only when chosen and run in a worker. A failure keeps the
+  SysON layout with a quiet status.
+- `syson_requirements_list`: the authored requirements under a root element with
+  their limits, read live by the requirements viewer.
+- `syson_diagram_types`: the native representation types SysON offers for an
+  element (diagram and table views), read-only.
+- AI context selection with compact, reference and query tiers: more than eight
+  selected elements become one query element the model can resolve.
+- Reproducible README captures of the diagram viewer
+  (`docs/fixtures/diagram-session.json`,
+  `docs/images/mcp-syson-diagram-viewer.png`) next to the requirements one.
+
+### Changed
+
+- **`syson_diagram_snapshot` result** (breaking for consumers of `nodes` and
+  `edges`):
+  - hidden elements (and everything under a hidden node) are left out and
+    counted in `hiddenNodeCount` / `hiddenEdgeCount`; faded ones carry
+    `faded: true`;
+  - nodes nested in a free-form compartment or a view frame have kind `node`
+    (was `compartment`); node styles carry `childrenLayout` (`list` / `free`);
+  - edges carry SysON's `style` (`lineStyle`, `sourceArrow`, `targetArrow`).
+- Seven viewers on one UX: a shared header (eyebrow, title, meta, actions, AI
+  context basket), selectable rows with SysML kind pills (outlined definitions,
+  filled usages), identifiers behind a technical-details disclosure.
+  - Model explorer: a tree with lazy, cached branches, family groups, kind
+    filters and WAI-ARIA keyboard navigation; an element page per item.
+  - Validation: counts per severity, diagnostics named by their constraint.
+  - Requirements trace: rows with TRACE GAP, a gaps-only filter and a summary.
+  - Diagram: the diagram's name is the title, the representation type ("General
+    View") the eyebrow.
+- Dependencies: `@casys/mcp-server` 0.26.1 → `@mcpview/server` 0.30.0,
+  `@casys/mcp-view-contracts` → `@mcpview/contracts` 0.2.0; viewers on
+  `@mcpview/view` 0.11.0 and `@mcpview/components` 0.12.0; MCP SDK v2
+  (`@modelcontextprotocol/client` and `core` 2.3, `ext-apps` 2.0.3).
+- Package, App manifest and current server identity are `0.9.0`. The published
+  OCI image moves to `ghcr.io/superworldsavior/mcp-syson`.
+- The diagram viewer bundle grows to about 2.3 MB (ELK, never evaluated unless
+  Auto is chosen).
+
+### Fixed
+
+- The requirements trace accepts the output of the provider's own tools.
+- Validation shows its diagnostics instead of a bare count.
+- Interconnection, Action Flow and State Transition diagrams no longer fall back
+  to an approximate SVG that drew every element SysON hides.
+
 ## [0.8.7] - 2026-09-05
 
 ### Added
@@ -43,9 +111,9 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
   stamps and the `aria-label` are gone).
 - Kit status wording replaces the facade's: a missing host surface reads "This
   App exposes components and requires a host-selected surface." and a rejected
-  one renders the "Surface invalid" title; the kit stamps
-  `data-casys-surface-*` on the document element on every host-context change.
-  The `data-display-mode="fullscreen"` layout rule (`min-height: 100vh`) is gone
+  one renders the "Surface invalid" title; the kit stamps `data-casys-surface-*`
+  on the document element on every host-context change. The
+  `data-display-mode="fullscreen"` layout rule (`min-height: 100vh`) is gone
   with the stamp it keyed on.
 - Viewer builds require the audited `@casys/mcp-view@0.9.3` +
   `@casys/mcp-view-contracts@0.1.0` + `@casys/mcp-view-components@0.9.0` split
