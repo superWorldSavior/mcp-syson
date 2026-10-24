@@ -1,0 +1,64 @@
+/* Validation viewer (UX v1, syson-ux-design.md §2): kit tokens only. */
+
+.syson-validation-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.syson-validation-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+/* Section heading in the kit's notice-label voice, with a severity dot. */
+.syson-validation-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--mcp-view-quiet);
+  font-family: var(--mcp-view-font-body);
+  font-size: var(--mcp-view-size-micro);
+  font-weight: 600;
+  letter-spacing: var(--mcp-view-tracking-label);
+  text-transform: uppercase;
+}
+.syson-validation-heading[data-tone]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--mcp-view-ghost);
+}
+.syson-validation-heading[data-tone="danger"]::before {
+  background: var(--mcp-view-danger);
+}
+.syson-validation-heading[data-tone="warning"]::before {
+  background: var(--mcp-view-warning);
+}
+.syson-validation-heading[data-tone="info"]::before {
+  background: var(--mcp-view-accent);
+}
+.syson-validation-count {
+  color: var(--mcp-view-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* Messages, names and expressions are the content: wrap them, never cut them,
+   so every row stays readable at 420 px. */
+.syson-validation .syson-row-label,
+.syson-validation .syson-row-meta {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.syson-validation-expression {
+  color: var(--mcp-view-text-secondary);
+  font-family: var(--mcp-view-font-mono);
+  font-size: 0.95em;
+}

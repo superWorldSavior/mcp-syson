@@ -42,7 +42,15 @@ export function createSelectionGesture(
     onKeyDown(
       event: { key: string; repeat?: boolean; preventDefault(): void },
     ) {
-      if (valid()) controller.clickIntents.keyDown(intent, event);
+      if (!valid()) return;
+      // Without a detail to open, Enter selects like Space so a role="button"
+      // row stays operable from the keyboard.
+      const key = !openDetail && event.key === "Enter" ? " " : event.key;
+      controller.clickIntents.keyDown(intent, {
+        key,
+        repeat: event.repeat,
+        preventDefault: () => event.preventDefault(),
+      });
     },
   };
 }

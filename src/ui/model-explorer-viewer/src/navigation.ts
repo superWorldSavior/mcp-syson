@@ -13,6 +13,8 @@ export interface ChildrenData extends Record<string, unknown> {
 export interface ModelLevel {
   data: ChildrenData;
   label: string;
+  /** SysML kind of the opened element; absent for the root level. */
+  kind?: string;
   filter: string;
   scrollTop: number;
 }
@@ -93,6 +95,7 @@ export function createModelNavigation(root: ChildrenData) {
           levels: [...snapshot.levels, {
             data,
             label: element.label || element.id,
+            kind: element.kind,
             filter: "",
             scrollTop: 0,
           }],

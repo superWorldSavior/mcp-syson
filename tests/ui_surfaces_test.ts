@@ -241,12 +241,17 @@ Deno.test("viewers reuse v2 primitives only where the data is truthful", async (
   assertEquals(explorer.includes("TextInput"), true);
   assertEquals(explorer.includes("InlineCode"), true);
   assertEquals(explorer.includes("PathBar"), true);
-  assertEquals(explorer.includes("TreeList"), true);
+  // UX v1: the shared ElementRow replaces the TreeList rows (aligned, full width).
+  assertEquals(explorer.includes("ElementRow"), true);
+  assertEquals(explorer.includes("ViewerHeader"), true);
   assertEquals(explorer.includes("aria-expanded"), false);
   assertEquals(explorer.includes("ElementVerdict"), false);
 
   assertEquals(query.includes("SemanticElement"), true);
-  assertEquals(query.includes("SemanticList"), true);
+  // UX v1: shared ElementRow + AI-context basket replace SemanticList rows and select-result.
+  assertEquals(query.includes("ElementRow"), true);
+  assertEquals(query.includes("SelectionBasket"), true);
+  assertEquals(query.includes("select-result"), false);
   assertEquals(query.includes("TextInput"), true);
   assertEquals(query.includes("CodeBlock"), true);
   assertEquals(query.includes("PathBar"), false);
@@ -264,7 +269,8 @@ Deno.test("viewers reuse v2 primitives only where the data is truthful", async (
   assertEquals(requirements.includes("linkCoverageGauge"), true);
   assertEquals(requirements.includes('title="error"'), true);
   assertEquals(requirements.includes("data.error !== undefined"), true);
-  assertEquals(requirements.includes("PathBar"), false);
+  // UX v1: the detail sheet returns through a PathBar.
+  assertEquals(requirements.includes("PathBar"), true);
   assertEquals([...requirements.matchAll(/<Coverage[\s>]/g)].length, 1);
   assertEquals([...requirements.matchAll(/<TraceList[\s>]/g)].length, 1);
   assertEquals(
@@ -282,16 +288,15 @@ Deno.test("viewers reuse v2 primitives only where the data is truthful", async (
     true,
   );
   assertEquals(requirements.includes('t("noRequirements")'), true);
-  assertEquals(
-    requirements.includes('t("noModeRequirements", { mode })'),
-    true,
-  );
-  assertEquals(requirements.includes("Aucune exigence all"), false);
+  // UX v1: one "gaps only" filter replaces the all/linked/unlinked modes.
+  assertEquals(requirements.includes('t("noGaps")'), true);
+  assertEquals(requirements.includes('"TRACE GAP"'), true);
 
   assertEquals(authored.includes("ElementLimit"), true);
-  assertEquals(authored.includes("Disclosure"), true);
+  assertEquals(authored.includes("TechnicalDetails"), true);
+  assertEquals(authored.includes("PathBar"), true);
   assertEquals(authored.includes("FocusedView"), false);
-  assertEquals(authored.includes("sysonMessages("), true);
+  assertEquals(authored.includes("requirementsMessages("), true);
 
   assertEquals(validation.includes("validationContractLabel"), true);
   assertEquals(validation.includes("SemanticElement"), true);
@@ -339,7 +344,8 @@ Deno.test("viewers reuse v2 primitives only where the data is truthful", async (
     ]
   ) {
     assertEquals(source.includes("syson-element-stack"), false);
-    assertEquals(source.includes("sysonMessages("), true);
+    // Viewers translate through sysonMessages or a viewer catalog built on it.
+    assertEquals(/\b[a-zA-Z]*[mM]essages\(/.test(source), true);
     assertEquals(source.includes("surfaceLabel("), true);
     assertEquals(source.includes("context.hostContext.locale"), true);
   }

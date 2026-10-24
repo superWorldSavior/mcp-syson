@@ -1,6 +1,7 @@
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import {
   fitDiagram,
+  openingFocus,
   semanticDiagramMember,
   toolContent,
 } from "../src/ui/diagram-viewer/src/diagram-model.ts";
@@ -482,4 +483,22 @@ Deno.test("Space pan latches a drag until completion, releases cleanly, and neve
   assertEquals(prevented, true);
   await controller.setItems([], "add");
   assertEquals(controller.getSnapshot().items, []);
+});
+
+Deno.test("opening focus follows reading order, not document order", () => {
+  const node = (x: number, y: number) => ({
+    kind: "node",
+    rect: { x, y, width: 100, height: 40 },
+  });
+  // SysON can list a bottom block first; the opening view starts top-left.
+  assertEquals(
+    openingFocus([
+      node(400, 900),
+      { kind: "edge" },
+      node(300, 12),
+      node(40, 10),
+    ]),
+    { x: 40, y: 10, width: 100, height: 40 },
+  );
+  assertEquals(openingFocus([{ kind: "edge" }]), undefined);
 });

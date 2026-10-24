@@ -1,0 +1,327 @@
+/* diagram-viewer, UX v1 (syson-ux-design.md §2). Kit tokens only. */
+
+/* ── Header: one line, title then menu and basket ───────────────────────── */
+.syson-diagram-viewer .syson-viewer-header-main {
+  align-items: center;
+}
+@container (max-width: 520px) {
+  /* The diagram needs its height: keep one header line, the title shrinks. */
+  .syson-diagram-viewer .syson-viewer-header-main {
+    flex-direction: row;
+    align-items: center;
+  }
+  .syson-diagram-viewer .syson-viewer-titles {
+    flex: 1 1 6rem;
+    min-width: 6rem;
+  }
+  .syson-diagram-viewer .syson-viewer-actions {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+}
+
+.syson-menu {
+  position: relative;
+  display: inline-flex;
+}
+.syson-menu-button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+}
+.syson-menu-button[aria-expanded="true"] {
+  border-color: var(--mcp-view-accent);
+  color: var(--mcp-view-accent-text);
+}
+.syson-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  min-width: 13.5rem;
+  padding: 4px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius, 8px);
+  background: var(--mcp-view-panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--mcp-view-text) 14%,
+    transparent);
+}
+.syson-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--mcp-view-radius-sm, 4px);
+  background: transparent;
+  color: var(--mcp-view-text);
+  font: inherit;
+  font-size: var(--mcp-view-size-body);
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.syson-menu-item:hover,
+.syson-menu-item:focus-visible {
+  background: var(--mcp-view-subtle);
+  outline: none;
+}
+.syson-menu-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--mcp-view-accent);
+}
+
+/* ── Panels opened from the menu ────────────────────────────────────────── */
+.syson-diagram-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: var(--mcp-view-radius, 8px);
+  background: var(--mcp-view-subtle);
+}
+.syson-diagram-panel:focus {
+  outline: none;
+}
+.syson-diagram-panel:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 2px;
+}
+.syson-diagram-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.syson-diagram-panel-title {
+  margin: 0;
+  color: var(--mcp-view-text);
+  font-size: var(--mcp-view-size-lede);
+  font-weight: 600;
+}
+.syson-diagram-panel-close {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--mcp-view-radius-control, 5px);
+  background: transparent;
+  color: var(--mcp-view-muted);
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.syson-diagram-panel-close:hover,
+.syson-diagram-panel-close:focus-visible {
+  border-color: var(--mcp-view-border);
+  background: var(--mcp-view-panel);
+  color: var(--mcp-view-text);
+}
+.syson-diagram-panel-close:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 1px;
+}
+.syson-diagram-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--mcp-view-muted);
+  font-size: var(--mcp-view-size-note);
+}
+.syson-diagram-select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius-control, 5px);
+  background: var(--mcp-view-panel);
+  color: var(--mcp-view-text);
+  font: inherit;
+  font-size: var(--mcp-view-size-note);
+}
+.syson-diagram-select:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 1px;
+}
+
+/* ── Canvas: the available height ───────────────────────────────────────── */
+.syson-diagram-viewer .syson-diagram-canvas {
+  height: clamp(320px, 64cqi, 760px);
+  min-height: 240px;
+}
+.syson-diagram-viewer .syson-diagram-canvas[hidden] {
+  display: none;
+}
+.syson-diagram-marquee {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid var(--mcp-view-accent);
+  background: color-mix(in srgb, var(--mcp-view-accent) 15%, transparent);
+  pointer-events: none;
+}
+
+/* Selection drawn in screen space: 3px whatever the zoom. Confirmed is
+   solid, pending intent dashed, as in the kit's context rows. */
+.syson-diagram-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.syson-diagram-selection-box,
+.syson-diagram-focus-box {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 6px;
+}
+.syson-diagram-selection-box {
+  border: 3px solid var(--mcp-view-accent);
+  background: color-mix(in srgb, var(--mcp-view-accent) 8%, transparent);
+}
+.syson-diagram-selection-box[data-context-state="adding"] {
+  border-style: dashed;
+}
+.syson-diagram-selection-box[data-context-state="removing"] {
+  border-style: dashed;
+  border-color: var(--mcp-view-quiet);
+  background: transparent;
+}
+.syson-diagram-focus-box {
+  box-shadow: 0 0 0 2px var(--mcp-view-panel), 0 0 0 4px var(--mcp-view-text);
+}
+.syson-diagram-stage g[tabindex]:focus,
+.syson-diagram-stage g[tabindex]:focus-visible {
+  outline: none;
+}
+.syson-diagram-stage g[data-context-state="selected"] > :is(rect, ellipse, circle, polygon, path, line, polyline),
+.syson-diagram-stage g[data-context-state="adding"] > :is(rect, ellipse, circle, polygon, path, line, polyline) {
+  stroke: var(--mcp-view-accent);
+}
+
+/* ── Floating toolbar ───────────────────────────────────────────────────── */
+.syson-diagram-viewer .syson-diagram-floating-tools {
+  max-width: calc(100% - 20px);
+}
+.syson-diagram-viewer .syson-diagram-floating-tools .mcp-view-toolbar {
+  flex-wrap: wrap;
+}
+.syson-diagram-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.35rem;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mcp-view-accent) 14%, transparent);
+  color: var(--mcp-view-accent-text);
+  font-size: var(--mcp-view-size-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.syson-diagram-count:empty {
+  display: none;
+}
+.syson-diagram-help-button {
+  min-height: 0;
+  font-weight: 600;
+}
+.syson-diagram-help-button[aria-expanded="true"] {
+  border-color: var(--mcp-view-accent);
+  color: var(--mcp-view-accent-text);
+}
+.syson-diagram-help-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 4;
+  width: max-content;
+  max-width: min(22rem, calc(100cqi - 48px));
+  padding: 10px 12px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius, 8px);
+  background: var(--mcp-view-panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--mcp-view-text) 14%,
+    transparent);
+  color: var(--mcp-view-text-secondary);
+  font-size: var(--mcp-view-size-note);
+  line-height: 1.45;
+  cursor: auto;
+}
+.syson-diagram-help-popover[hidden] {
+  display: none;
+}
+.syson-diagram-help-title {
+  margin: 0 0 6px;
+  color: var(--mcp-view-text);
+  font-weight: 600;
+}
+.syson-diagram-help-popover ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── Mini-map ───────────────────────────────────────────────────────────── */
+.syson-diagram-minimap {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 4px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius, 8px);
+  background: var(--mcp-view-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--mcp-view-text) 10%,
+    transparent);
+  cursor: pointer;
+  touch-action: none;
+}
+.syson-diagram-minimap svg {
+  display: block;
+}
+.syson-diagram-minimap-frame {
+  fill: var(--mcp-view-subtle);
+  stroke: none;
+}
+.syson-diagram-minimap-block {
+  fill: color-mix(in srgb, var(--mcp-view-muted) 32%, transparent);
+}
+.syson-diagram-minimap-block[data-selected="true"] {
+  fill: var(--mcp-view-accent);
+}
+.syson-diagram-minimap-viewport {
+  fill: color-mix(in srgb, var(--mcp-view-accent) 10%, transparent);
+  stroke: var(--mcp-view-accent);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ── Detail sheet in place of the canvas ────────────────────────────────── */
+.syson-diagram-detail-frame {
+  min-width: 0;
+}
+.syson-diagram-detail {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.syson-diagram-detail:focus {
+  outline: none;
+}
+.syson-diagram-detail:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 2px;
+}

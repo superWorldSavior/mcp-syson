@@ -4,8 +4,8 @@ import {
   ActiveContextChip,
   type ContextBasketLabels,
   MCP_VIEW_CONTEXT_BASKET_CSS,
+  MCP_VIEW_CONTEXT_SELECTION_CSS,
 } from "@mcpview/components/preact/context";
-import { Toolbar } from "@mcpview/components/preact/components";
 import type { SurfaceAppContext } from "./preact-surface.tsx";
 import {
   type SelectionController,
@@ -23,7 +23,7 @@ const labels = {
     error: "Context update refused.",
     evicted: (label: string) =>
       `${label} was removed because the context is full.`,
-    empty: "Click an element to add it to AI context.",
+    empty: "Click to add to AI context",
     retry: "Retry",
     unavailable: "Context selection is unavailable in this host.",
   },
@@ -36,7 +36,7 @@ const labels = {
     error: "Mise à jour du contexte refusée.",
     evicted: (label: string) =>
       `${label} a été retiré car le contexte est plein.`,
-    empty: "Cliquez sur un élément pour l’ajouter au contexte de l’IA.",
+    empty: "Cliquez pour ajouter au contexte de l’IA",
     retry: "Réessayer",
     unavailable: "La sélection de contexte est indisponible dans cet hôte.",
   },
@@ -64,21 +64,30 @@ export function SelectionBasket<T extends ResultData>(
     item: { id: selectionKey(entry), label: entry.label },
     entry,
   }));
+  // Lives at the end of the viewer header (syson-ux-design.md §1): a compact
+  // chip that shows what the host acknowledged, with a quiet hint when empty.
   return (
-    <>
-      <style>{MCP_VIEW_CONTEXT_BASKET_CSS}</style>
-      <Toolbar label={t.active}>
-        {!snapshot.available ? <span role="status">{t.unavailable}</span> : (
+    <div className="syson-basket" role="group" aria-label={t.active}>
+      <style>
+        {MCP_VIEW_CONTEXT_BASKET_CSS + MCP_VIEW_CONTEXT_SELECTION_CSS}
+      </style>
+      {!snapshot.available
+        ? (
+          <span className="syson-basket-hint" role="status">
+            {t.unavailable}
+          </span>
+        )
+        : (
           <>
             {!selections.length && !snapshot.pending && !snapshot.error && (
-              <span role="status">{t.empty}</span>
+              <span className="syson-basket-hint" role="status">{t.empty}</span>
             )}
             <ActiveContextChip
               selections={selections}
               labels={t}
               failed={Boolean(snapshot.error)}
               pending={snapshot.pending}
-              popoverAlign="start"
+              popoverAlign="end"
               onRemove={async ({ entry }) => {
                 const scope = controller.scopeVersion();
                 await controller.remove(entry);
@@ -101,7 +110,6 @@ export function SelectionBasket<T extends ResultData>(
             />
           </>
         )}
-      </Toolbar>
-    </>
+    </div>
   );
 }

@@ -134,11 +134,18 @@ interface SelectableDiagramGroup {
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
 }
-/** Patch confirmed selection only; preserve SVG nodes, native focus and double-click targets. */
+/** The kit's context states (`data-context-state`): confirmed vs pending intent. */
+export type DiagramContextState = "selected" | "adding" | "removing" | "none";
+/**
+ * Patch selection only; preserve SVG nodes, native focus and double-click
+ * targets. `states` (by semantic id) adds the kit's `data-context-state` so
+ * pending intent reads differently from confirmed selection.
+ */
 export function syncDiagramSelection(
   groups: Iterable<SelectableDiagramGroup>,
   members: readonly DiagramMember[],
   confirmedIds: readonly string[],
+  states?: ReadonlyMap<string, DiagramContextState>,
 ) {
   const selected = new Set(confirmedIds);
   for (const group of groups) {
@@ -149,12 +156,267 @@ export function syncDiagramSelection(
     if (!member) {
       group.removeAttribute("data-selected");
       group.removeAttribute("aria-pressed");
+      group.removeAttribute("data-context-state");
       continue;
     }
     const confirmed = selected.has(member.targetObjectId!);
     group.setAttribute("aria-pressed", String(confirmed));
     group.setAttribute("data-selected", String(confirmed));
+    if (states) {
+      group.setAttribute(
+        "data-context-state",
+        states.get(member.targetObjectId!) ?? "none",
+      );
+    }
   }
+}
+
+export interface DiagramRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export interface DiagramTransform {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+/** Opening legibility floor (syson-ux-design.md §2, diagram-viewer). */
+export const DIAGRAM_OPENING_FLOOR = 0.35;
+
+function finiteRect(rect: DiagramRect | undefined): rect is DiagramRect {
+  return !!rect &&
+    [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+    rect.width >= 0 && rect.height >= 0;
+}
+
+/**
+ * One axis of a floored view: center the content when it fits, otherwise
+ * follow the focus without scrolling past the content edges.
+ */
+function followAxis(
+  viewport: number,
+  start: number,
+  size: number,
+  focus: number,
+  scale: number,
+  padding: number,
+) {
+  const extent = size * scale;
+  if (extent + padding * 2 <= viewport) {
+    return (viewport - extent) / 2 - start * scale;
+  }
+  const wanted = viewport / 2 - focus * scale;
+  const atStart = padding - start * scale;
+  const atEnd = viewport - padding - (start + size) * scale;
+  return Math.min(atStart, Math.max(atEnd, wanted));
+}
+
+/**
+ * Reading-order focus for the opening view: the top-most node, then the
+ * left-most among nodes on that row (within `rowTolerance`). Document order
+ * says nothing about position: SysON may list a bottom block first.
+ */
+export function openingFocus(
+  entries: readonly { kind?: string; rect?: DiagramRect }[],
+  rowTolerance = 8,
+): DiagramRect | undefined {
+  let best: DiagramRect | undefined;
+  for (const entry of entries) {
+    if (entry.kind !== "node" || !finiteRect(entry.rect)) continue;
+    const rect = entry.rect;
+    if (
+      !best || rect.y < best.y - rowTolerance ||
+      (Math.abs(rect.y - best.y) <= rowTolerance && rect.x < best.x)
+    ) {
+      best = rect;
+    }
+  }
+  return best;
+}
+
+/**
+ * Opening view: the whole diagram when "fit" stays legible, otherwise the
+ * floor scale centered on `focus` (the first primary block), clamped so the
+ * view never opens on empty space past the diagram edges. Without a focus the
+ * diagram's top-left corner is shown. The explicit Fit control stays
+ * `fitDiagram`.
+ */
+export function openingDiagramView(
+  bounds: DiagramRect,
+  viewport: { width: number; height: number },
+  focus?: DiagramRect,
+  floor = DIAGRAM_OPENING_FLOOR,
+  padding = 24,
+): DiagramTransform & { floored: boolean } {
+  const fit = fitDiagram(bounds, viewport, padding);
+  if (fit.scale >= floor || !finiteRect(bounds) || !(floor > 0)) {
+    return { ...fit, floored: false };
+  }
+  const target = finiteRect(focus)
+    ? focus
+    : { x: bounds.x, y: bounds.y, width: 0, height: 0 };
+  return {
+    scale: floor,
+    x: followAxis(
+      viewport.width,
+      bounds.x,
+      bounds.width,
+      target.x + target.width / 2,
+      floor,
+      padding,
+    ),
+    y: followAxis(
+      viewport.height,
+      bounds.y,
+      bounds.height,
+      target.y + target.height / 2,
+      floor,
+      padding,
+    ),
+    floored: true,
+  };
+}
+
+/**
+ * Frame one region (zoom to selection): fit it with padding, never past
+ * `maxScale` so a single small row is not blown up, centered in the viewport.
+ */
+export function frameDiagramRegion(
+  region: DiagramRect,
+  viewport: { width: number; height: number },
+  options: { padding?: number; minScale?: number; maxScale?: number } = {},
+): DiagramTransform | undefined {
+  const { minScale = 0.1, maxScale = 1.5 } = options;
+  if (
+    !finiteRect(region) || !Number.isFinite(viewport.width) ||
+    !Number.isFinite(viewport.height) || viewport.width <= 0 ||
+    viewport.height <= 0
+  ) return undefined;
+  const padding = Math.min(
+    options.padding ?? 48,
+    viewport.width / 4,
+    viewport.height / 4,
+  );
+  const fitWidth = region.width > 0
+    ? (viewport.width - padding * 2) / region.width
+    : Infinity;
+  const fitHeight = region.height > 0
+    ? (viewport.height - padding * 2) / region.height
+    : Infinity;
+  const scale = Math.min(
+    Math.max(Math.min(fitWidth, fitHeight), minScale),
+    maxScale,
+  );
+  return {
+    scale,
+    x: viewport.width / 2 - (region.x + region.width / 2) * scale,
+    y: viewport.height / 2 - (region.y + region.height / 2) * scale,
+  };
+}
+
+export function unionDiagramRects(
+  rects: Iterable<DiagramRect>,
+): DiagramRect | undefined {
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const rect of rects) {
+    if (!finiteRect(rect)) continue;
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
+  }
+  return left === Infinity
+    ? undefined
+    : { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/** Diagram-space rectangle to canvas pixels under the current pan and zoom. */
+export function diagramRectToCanvas(
+  rect: DiagramRect,
+  transform: DiagramTransform,
+): DiagramRect {
+  return {
+    x: transform.x + rect.x * transform.scale,
+    y: transform.y + rect.y * transform.scale,
+    width: rect.width * transform.scale,
+    height: rect.height * transform.scale,
+  };
+}
+
+/** The diagram-space area the canvas currently shows (the mini-map viewport). */
+export function visibleDiagramRect(
+  viewport: { width: number; height: number },
+  transform: DiagramTransform,
+): DiagramRect {
+  return {
+    x: -transform.x / transform.scale,
+    y: -transform.y / transform.scale,
+    width: viewport.width / transform.scale,
+    height: viewport.height / transform.scale,
+  };
+}
+
+/** Keep the zoom and bring one diagram point to the canvas center. */
+export function centerDiagramPoint(
+  point: DiagramPoint,
+  viewport: { width: number; height: number },
+  scale: number,
+): DiagramTransform {
+  return {
+    scale,
+    x: viewport.width / 2 - point.x * scale,
+    y: viewport.height / 2 - point.y * scale,
+  };
+}
+
+export function rectsIntersect(a: DiagramRect, b: DiagramRect) {
+  return a.x < b.x + b.width && b.x < a.x + a.width &&
+    a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/** Mini-map size: the diagram bounds fitted in a box, aspect preserved. */
+export function minimapSize(
+  bounds: DiagramRect,
+  box: { width: number; height: number },
+) {
+  if (!finiteRect(bounds) || bounds.width <= 0 || bounds.height <= 0) {
+    return undefined;
+  }
+  const scale = Math.min(box.width / bounds.width, box.height / bounds.height);
+  return {
+    width: Math.max(1, Math.round(bounds.width * scale)),
+    height: Math.max(1, Math.round(bounds.height * scale)),
+  };
+}
+
+/** A source label without stereotype guillemets or line breaks, for titles. */
+export function plainElementName(label: string | undefined): string {
+  const text = label ?? "";
+  const plain = text.replace(/«[^»]*»/g, " ").replace(/\s+/g, " ").trim();
+  return plain || text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Viewer title (syson-ux-design.md §1.3): the representation and the element
+ * it shows, "General View — Batmobile". The view's own name stands in for an
+ * unknown target, and is shown alone only when nothing better exists.
+ */
+export function diagramTitle(parts: {
+  readonly representation?: string;
+  readonly name?: string;
+  readonly target?: string;
+  readonly fallback: string;
+}): string {
+  const clean = (value?: string) => value?.replace(/\s+/g, " ").trim() || "";
+  const representation = clean(parts.representation);
+  const name = clean(parts.name);
+  const target = clean(parts.target);
+  const head = representation || name || clean(parts.fallback);
+  const subject = target || name;
+  return subject && subject !== head ? `${head} — ${subject}` : head;
 }
 
 /** Once a gesture crossed the drag threshold, returning to its origin is still a drag. */

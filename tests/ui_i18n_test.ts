@@ -111,6 +111,5 @@ Deno.test("published kit versions replace local split provenance", async () => {
   );
   assertEquals(adapter.includes("mcpViewMessages(host.locale)"), false);
   assertEquals(trace.includes('t("noRequirements")'), true);
-  assertEquals(trace.includes('t("noModeRequirements", { mode })'), true);
-  assertEquals(trace.includes("Aucune exigence all"), false);
+  assertEquals(trace.includes('t("noGaps")'), true);
 });

@@ -33,40 +33,6 @@ input {
   padding: clamp(0.45rem, 1.4cqi, 0.75rem);
 }
 
-.syson-kind-mark {
-  display: inline-grid;
-  width: 1.15rem;
-  height: 1.15rem;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: var(--mcp-view-radius-sm, 0.25rem);
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  color: var(--mcp-view-muted, #5c6b76);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.64rem;
-}
-
-.syson-kind-mark[data-kind-tone="part"],
-.syson-kind-mark[data-kind-tone="item"] {
-  color: var(--mcp-view-accent, #0d7c8a);
-}
-
-.syson-kind-mark[data-kind-tone="attribute"],
-.syson-kind-mark[data-kind-tone="action"] {
-  color: var(--mcp-view-success, #12855f);
-}
-
-.syson-kind-mark[data-kind-tone="requirement"],
-.syson-kind-mark[data-kind-tone="constraint"] {
-  color: var(--mcp-view-warning, #d98b1f);
-}
-
-.syson-kind-mark[data-kind-tone="connection"],
-.syson-kind-mark[data-kind-tone="port"] {
-  color: var(--mcp-view-danger, #c9453c);
-}
-
 .syson-diagram-card {
   overflow: visible;
 }
@@ -209,9 +175,29 @@ input {
   background: var(--mcp-view-subtle);
   border-color: var(--mcp-view-accent);
 }
-.syson-diagram-toolseparator { height: 20px; border-inline-start: 1px solid var(--mcp-view-border); margin-inline: 3px; }
-.syson-diagram-zoom { min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; font-size: .75rem; color: var(--mcp-view-text-secondary); }
-.syson-diagram-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.syson-diagram-toolseparator {
+  height: 20px;
+  border-inline-start: 1px solid var(--mcp-view-border);
+  margin-inline: 3px;
+}
+.syson-diagram-zoom {
+  min-width: 3.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: .75rem;
+  color: var(--mcp-view-text-secondary);
+}
+.syson-diagram-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* Root-level brand credit stays outside every interactive viewer surface. */
 .syson-viewer-credit {
@@ -228,10 +214,460 @@ input {
   font-size: var(--mcp-view-size-chip);
   text-decoration: none;
 }
-.syson-casys-credit img { display: block; }
-.syson-casys-credit:hover { color: var(--mcp-view-accent); }
+.syson-casys-credit img {
+  display: block;
+}
+.syson-casys-credit:hover {
+  color: var(--mcp-view-accent);
+}
 .syson-casys-credit:focus-visible {
   outline: 2px solid var(--mcp-view-accent);
   outline-offset: 2px;
   border-radius: var(--mcp-view-radius-sm);
+}
+
+/* ── Shared viewer chrome (UX v1, syson-ux-design.md §1) ─────────────────── */
+
+.syson-viewer-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--mcp-view-border, #dbe3e7);
+  background: var(--mcp-view-panel, #ffffff);
+}
+.syson-viewer-header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.syson-viewer-titles {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.syson-viewer-eyebrow {
+  color: var(--mcp-view-quiet, #7b8894);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: var(--mcp-view-size-micro, 10px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.syson-viewer-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--mcp-view-text, #101519);
+  font-family: var(--mcp-view-font-heading, inherit);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.syson-viewer-meta {
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.syson-viewer-actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.syson-viewer-actions .mcp-view-text-input,
+.syson-viewer-actions input[type="search"],
+.syson-viewer-actions input[type="text"] {
+  min-width: 11rem;
+}
+.syson-viewer-header-below {
+  min-width: 0;
+}
+
+.syson-basket {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2rem;
+}
+.syson-basket-hint {
+  color: var(--mcp-view-quiet, #7b8894);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Kind pill: family tone, outlined definitions, filled usages. */
+.syson-kind-mark {
+  display: inline-grid;
+  min-width: 2.7rem;
+  height: 1.3rem;
+  padding: 0 5px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
+  border-radius: var(--mcp-view-radius-sm, 4px);
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  color: var(--mcp-view-muted, #5c6b76);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+/* Definitions read as outlines; dashes stay reserved for pending context. */
+.syson-kind-mark[data-kind-definition="true"] {
+  background: transparent;
+}
+.syson-kind-mark[data-kind-tone="structure"] {
+  color: var(--mcp-view-accent, #0d7c8a);
+}
+.syson-kind-mark[data-kind-tone="interface"] {
+  color: var(--mcp-view-brand, #8a4fa3);
+}
+.syson-kind-mark[data-kind-tone="behavior"] {
+  color: var(--mcp-view-success, #12855f);
+}
+.syson-kind-mark[data-kind-tone="requirement"] {
+  color: var(--mcp-view-warning, #b7700f);
+}
+
+/* Element rows: full width, aligned, selection state from the kit. */
+.syson-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.syson-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 2.6rem;
+  padding: 6px 8px 6px 10px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.syson-row:hover {
+  border-color: color-mix(in srgb, var(--mcp-view-accent, #0d7c8a) 45%,
+    var(--mcp-view-border, #dbe3e7));
+}
+.syson-row[data-context-state="none"]:hover {
+  background: var(--mcp-view-subtle, #f4f7f8);
+}
+.syson-row-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.syson-row-label {
+  overflow: hidden;
+  color: var(--mcp-view-text, #101519);
+  font-size: 0.85rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.syson-row-meta {
+  overflow: hidden;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.syson-row-trailing {
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.syson-row-open {
+  display: inline-grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--mcp-view-radius-control, 6px);
+  background: transparent;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.syson-row-open:hover,
+.syson-row-open:focus-visible {
+  border-color: var(--mcp-view-border, #dbe3e7);
+  background: var(--mcp-view-panel, #ffffff);
+  color: var(--mcp-view-accent, #0d7c8a);
+}
+.syson-row-open:focus-visible {
+  outline: 2px solid var(--mcp-view-accent, #0d7c8a);
+  outline-offset: 1px;
+}
+
+.syson-scroll {
+  max-height: min(62vh, 36rem);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.syson-technical {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 6px;
+}
+.syson-technical-label {
+  color: var(--mcp-view-quiet, #7b8894);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: var(--mcp-view-size-micro, 10px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.syson-technical-value {
+  overflow-wrap: anywhere;
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+}
+.syson-technical-copy {
+  padding: 2px 8px;
+  border: 1px solid var(--mcp-view-border, #dbe3e7);
+  border-radius: var(--mcp-view-radius-control, 6px);
+  background: var(--mcp-view-panel, #ffffff);
+  color: var(--mcp-view-text, #101519);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+@container (max-width: 520px) {
+  .syson-viewer-header-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .syson-viewer-actions {
+    justify-content: space-between;
+  }
+  .syson-viewer-actions .mcp-view-text-input,
+  .syson-viewer-actions input[type="search"],
+  .syson-viewer-actions input[type="text"] {
+    min-width: 0;
+    flex: 1 1 10rem;
+  }
+  .syson-basket-hint {
+    display: none;
+  }
+  .syson-kind-counts {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .syson-kind-counts li {
+    flex: 0 0 auto;
+  }
+}
+
+.syson-viewer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+.syson-element-sheet {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.syson-kind-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.syson-kind-counts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 4px;
+  border: 1px solid var(--mcp-view-border, #dbe3e7);
+  border-radius: 999px;
+  background: var(--mcp-view-panel, #ffffff);
+  color: var(--mcp-view-text, #101519);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.syson-kind-counts .syson-kind-mark {
+  min-width: 0;
+  height: auto;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font-size: 0.6rem;
+}
+.syson-status {
+  margin: 0;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.78rem;
+}
+.syson-status[data-tone="danger"] {
+  color: var(--mcp-view-danger, #c9453c);
+}
+
+/* ── Model tree (explorer) ───────────────────────────────────────────────── */
+.syson-tree {
+  display: grid;
+  gap: 2px;
+}
+.syson-row[data-tree="true"] {
+  position: relative;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  min-height: 2.35rem;
+  padding: 3px 6px 3px calc(6px + var(--syson-depth, 0) * 22px);
+}
+/* Quiet tree: unselected rows lose their card frame, selection keeps the kit's. */
+.syson-row[data-tree="true"][data-context-state="none"] {
+  border-color: transparent;
+  background: transparent;
+}
+.syson-row[data-tree="true"][data-context-state="none"]:hover {
+  background: var(--mcp-view-subtle, #f4f7f8);
+}
+/* Indent guides: one hairline per ancestor level. */
+.syson-row[data-tree="true"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: calc(var(--syson-depth, 0) * 22px);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 10px,
+    var(--mcp-view-border, #dbe3e7) 10px 11px,
+    transparent 11px 22px
+  );
+  pointer-events: none;
+}
+.syson-row[data-tree="true"] .syson-row-label {
+  font-size: 0.84rem;
+}
+.syson-row[data-tree="true"] .syson-row-meta {
+  font-size: 0.7rem;
+}
+.syson-row-toggle,
+.syson-row-toggle-spacer {
+  display: inline-grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  place-items: center;
+}
+.syson-row-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: var(--mcp-view-radius-sm, 4px);
+  background: transparent;
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.syson-row-toggle > span:not(.syson-row-spinner) {
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+.syson-row-toggle[data-expanded="true"] > span:not(.syson-row-spinner) {
+  transform: rotate(90deg);
+}
+.syson-row-toggle:hover {
+  background: var(--mcp-view-subtle, #f4f7f8);
+  color: var(--mcp-view-accent, #0d7c8a);
+}
+.syson-row-spinner {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid var(--mcp-view-border, #dbe3e7);
+  border-top-color: var(--mcp-view-accent, #0d7c8a);
+  border-radius: 50%;
+  animation: syson-spin 700ms linear infinite;
+}
+@keyframes syson-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.syson-tree-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 2px;
+  padding: 0 6px;
+  color: var(--mcp-view-quiet, #7b8894);
+  font-family: var(--mcp-view-font-mono, ui-monospace, monospace);
+  font-size: var(--mcp-view-size-micro, 10px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.syson-tree-group:first-child {
+  margin-top: 0;
+}
+.syson-tree-group-count {
+  color: var(--mcp-view-muted, #5c6b76);
+}
+.syson-tree-status {
+  margin: 0;
+  padding: 4px 6px 4px calc(6px + var(--syson-depth, 0) * 22px + 2rem);
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: 0.74rem;
+}
+.syson-kind-counts li:has(> button) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.syson-kind-counts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 4px;
+  border: 1px solid var(--mcp-view-border, #dbe3e7);
+  border-radius: 999px;
+  background: var(--mcp-view-panel, #ffffff);
+  color: var(--mcp-view-text, #101519);
+  font: inherit;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.syson-kind-counts button[aria-pressed="true"] {
+  border-color: var(--mcp-view-accent, #0d7c8a);
+  background: color-mix(in srgb, var(--mcp-view-accent, #0d7c8a) 12%, var(--mcp-view-panel, #ffffff));
+}
+.syson-kind-counts button:focus-visible {
+  outline: 2px solid var(--mcp-view-accent, #0d7c8a);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .syson-row-spinner {
+    animation: none;
+  }
+}
+
+/* In count chips, a definition reads "PART·DEF" so usages and definitions differ. */
+.syson-kind-counts .syson-kind-mark[data-kind-definition="true"]::after {
+  content: "·DEF";
+  opacity: 0.65;
 }

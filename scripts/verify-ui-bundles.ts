@@ -106,8 +106,10 @@ for (const sourceUrl of VIEWER_SOURCE_PATHS) {
       `${sourceUrl.pathname}: viewer must not override the exact manifest appInfo identity.`,
     );
   }
+  // Viewers translate through sysonMessages or a viewer catalog built on it
+  // with createTranslator (for example requirementsMessages).
   if (
-    !source.includes("sysonMessages(") ||
+    !/\b[a-zA-Z]*[mM]essages\(/.test(source) ||
     !source.includes("surfaceLabel(")
   ) {
     throw new Error(

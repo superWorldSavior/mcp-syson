@@ -1,0 +1,55 @@
+/* Value-change viewer (UX v1). Shared chrome lives in ../../global.css. */
+
+/*
+ * The whole card is the element: one selectable frame carrying the kit's
+ * context state, with the kit card flattened inside so there is one box.
+ */
+.syson-value-card.mcp-view-context-selection {
+  display: block;
+  min-width: 0;
+  border-radius: var(--mcp-view-radius, 8px);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.syson-value-card[data-context-state="none"]:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--mcp-view-accent, #0d7c8a) 45%,
+    var(--mcp-view-border, #dbe3e7)
+  );
+  background: var(--mcp-view-subtle, #f4f7f8);
+}
+.syson-value-sheet > .mcp-view-semantic-element[data-density="card"] {
+  /* The selection frame owns the edge; the verdict keeps its tone colour. */
+  --mcp-view-semantic-verdict-border-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Kind pill as the identity marker, without the kit's marker chip around it. */
+.syson-value-sheet .mcp-view-element-ident-marker {
+  padding: 0;
+  background: none;
+}
+
+/* Before: struck and quieter. After: the main reading. */
+.syson-value-sheet .mcp-view-semantic-element[data-density="card"] .syson-value-before .mcp-view-element-reading-value {
+  color: var(--mcp-view-muted, #5c6b76);
+  font-size: var(--mcp-view-size-card-title, 1rem);
+  font-weight: 500;
+}
+.syson-value-before s {
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--mcp-view-muted, #5c6b76) 75%,
+    transparent
+  );
+  text-decoration-thickness: 2px;
+}
+.syson-value-sheet .mcp-view-semantic-element[data-density="card"] .syson-value-after {
+  flex-grow: 2;
+}
+
+.syson-value-viewer .syson-status[data-tone="warning"] {
+  color: var(--mcp-view-warning-text, #8a5408);
+}

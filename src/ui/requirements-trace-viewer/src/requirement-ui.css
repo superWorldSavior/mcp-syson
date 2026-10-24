@@ -1,0 +1,54 @@
+/* Detail sheet shared by the requirement viewers: one kit card, sections
+   inside, technical details as its footer. Kit theme tokens only. */
+
+.syson-sheet {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  outline: none;
+}
+
+/* The kind pill already carries its own tint inside the identity slot. */
+.syson-sheet .mcp-view-element-ident-marker {
+  padding: 0;
+  background: none;
+}
+
+.syson-sheet .mcp-view-element-body {
+  display: grid;
+  gap: 16px;
+}
+.syson-sheet .mcp-view-element-section + .mcp-view-element-section {
+  margin-top: 0;
+}
+
+/* Technical details close the datasheet, aligned with its sections. */
+.syson-sheet .mcp-view-element-body > .mcp-view-disclosure {
+  margin-top: 2px;
+}
+.syson-sheet .mcp-view-element-body > .mcp-view-disclosure > .mcp-view-disclosure-summary,
+.syson-sheet .mcp-view-element-body > .mcp-view-disclosure > .mcp-view-disclosure-body {
+  padding-inline: 0;
+}
+
+.syson-sheet-text {
+  display: grid;
+  gap: 6px;
+  max-width: 72ch;
+  color: var(--mcp-view-text, #101519);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.syson-sheet-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A literal state (unknown, TRACE GAP) followed by its plain explanation. */
+.syson-sheet-literal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  min-width: 0;
+}
