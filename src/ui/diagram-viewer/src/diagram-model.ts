@@ -4,6 +4,11 @@ export interface DiagramMember {
   label?: string;
   targetObjectId?: string;
   type?: string;
+  kind?: string;
+  parentId?: string;
+  outsideLabels?: string[];
+  sourceId?: string;
+  targetId?: string;
 }
 export function semanticDiagramMember<T extends DiagramMember>(
   members: readonly T[],
@@ -159,4 +164,141 @@ export function dragCrossedThreshold(
   current: DiagramPoint,
 ) {
   return previous || isDrag(start, current);
+}
+
+export function selectableDiagramMembers<T extends DiagramMember>(
+  nodes: readonly T[],
+  edges: readonly T[] = [],
+): T[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return [...nodes, ...edges].filter((member) => {
+    if (!member.targetObjectId?.trim()) return false;
+    const parent = member.parentId ? byId.get(member.parentId) : undefined;
+    return !(member.kind === "compartment" && parent &&
+      member.targetObjectId === parent.targetObjectId);
+  });
+}
+export function uniqueSemanticMembers<T extends DiagramMember>(
+  members: readonly T[],
+): T[] {
+  const unique = new Map<string, T>();
+  for (const member of members) {
+    if (member.targetObjectId && !unique.has(member.targetObjectId)) {
+      unique.set(member.targetObjectId, member);
+    }
+  }
+  return [...unique.values()];
+}
+export function zoomDiagram(
+  scale: number,
+  translate: DiagramPoint,
+  factor: number,
+  anchor: DiagramPoint,
+) {
+  const next = Math.min(Math.max(scale * factor, 0.1), 5);
+  return {
+    scale: next,
+    x: anchor.x - (anchor.x - translate.x) * next / scale,
+    y: anchor.y - (anchor.y - translate.y) * next / scale,
+  };
+}
+export function svgIntrinsicSize(
+  viewBox: string | null,
+  width: string | null,
+  height: string | null,
+) {
+  const box = viewBox?.trim().split(/[\s,]+/).map(Number);
+  if (
+    box?.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0
+  ) return { width: box[2], height: box[3] };
+  const w = Number.parseFloat(width || ""), h = Number.parseFloat(height || "");
+  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+    return { width: w, height: h };
+  }
+  return undefined;
+}
+
+/** Source-authored labels win; graphical and semantic IDs remain references, never primary labels. */
+export function readableDiagramMembers(
+  nodes: readonly DiagramMember[],
+  edges: readonly DiagramMember[],
+  labels: { element: string; relationship: string },
+): (DiagramMember & { label: string })[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const authored = (member: DiagramMember | undefined) =>
+    member?.label?.trim() || member?.outsideLabels?.map((label) =>
+      label.trim()
+    ).filter(Boolean).join(" ") || "";
+  const endpoint = (id: string | undefined): string => {
+    const visited = new Set<string>();
+    const parts: string[] = [];
+    let node = id ? byId.get(id) : undefined;
+    while (node && !visited.has(node.id)) {
+      visited.add(node.id);
+      const parent = node.parentId ? byId.get(node.parentId) : undefined;
+      const decorative = node.kind === "compartment" && parent &&
+        node.targetObjectId === parent.targetObjectId;
+      const label = authored(node);
+      if (label && !decorative) parts.unshift(label);
+      node = parent;
+    }
+    return parts.join(".");
+  };
+  const edgeIds = new Set(edges.map((edge) => edge.id));
+  return selectableDiagramMembers(nodes, edges).map((member) => {
+    let label = authored(member);
+    if (!label && edgeIds.has(member.id)) {
+      const source = endpoint(member.sourceId),
+        target = endpoint(member.targetId);
+      label = source && target ? `${source} → ${target}` : labels.relationship;
+    }
+    return { ...member, label: label || labels.element };
+  });
+}
+
+/** Marquee chooses primary diagram blocks; individual click keeps finer semantic detail. */
+export function marqueeDiagramMembers<T extends DiagramMember>(
+  members: readonly T[],
+): T[] {
+  return members.filter((member) =>
+    member.kind === "node" && !!member.targetObjectId?.trim()
+  );
+}
+
+/** A held Space affects new drags; each drag keeps its mode until completion. */
+export function createDiagramPanState() {
+  let held = false;
+  let drag: "select" | "pan" | undefined;
+  return {
+    press() {
+      held = true;
+    },
+    release() {
+      held = false;
+    },
+    begin(mode: "select" | "pan") {
+      drag = held ? "pan" : mode;
+      return drag;
+    },
+    end() {
+      drag = undefined;
+    },
+    reset() {
+      held = false;
+      drag = undefined;
+    },
+    effective(mode: "select" | "pan") {
+      return drag || (held ? "pan" : mode);
+    },
+    get held() {
+      return held;
+    },
+  };
+}
+export function acceptsDiagramSpace(
+  key: string,
+  editable: boolean,
+  insideCanvas: boolean,
+) {
+  return key === " " && !editable && insideCanvas;
 }

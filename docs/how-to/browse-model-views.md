@@ -32,10 +32,13 @@ SysON.
 1. Call `syson_diagram_list` with the editing context, then call
    `syson_diagram_snapshot` with the ID of an existing diagram.
 2. Use the diagram's zoom and fit controls to inspect its contents. Choose
-   **Select** to select elements; choose **Pan** to move the canvas.
-3. In Select mode, drag on the background to add the fully enclosed semantic
-   elements to the current basket. This adds to the selection rather than
-   replacing it. Individual clicks still toggle elements.
+   **Select** to select elements; choose **Pan** to move the canvas. You can
+   also hold Space and drag to pan temporarily, then release Space to return to
+   the chosen mode.
+3. In Select mode, drag on the background to add fully enclosed primary blocks
+   (parts in an architecture view). Internal rows, ports and relationships are
+   excluded from rectangle selection. Individual clicks can still select those
+   precise elements. The rectangle adds to the existing basket.
 4. Double-click an element or press Enter on its focused row to inspect its
    identity and, when live reads are available, its element details. Use the
    detail path to return to the diagram. Inspecting preserves the selection that
@@ -58,10 +61,11 @@ depth 8; do not treat it as an unbounded model export.
 
 ## Prepare context for the next AI turn
 
-Click a selectable element, or press Space on its focused row, to toggle it in
-the AI context basket. Click again to remove it. Use the basket to remove an
-item from another visited level, clear the context, or retry a failed update.
-The same gestures apply to the model explorer and diagram viewer. Authored
+Click a selectable element to toggle it in the AI context basket. Space also
+toggles focused rows in the model explorer; in diagrams, Space is reserved for
+temporary panning. Click again to remove it. Use the basket to remove an item
+from another visited level, clear the context, or retry a failed update. The
+same gestures apply to the model explorer and diagram viewer. Authored
 requirement rows also support click and Space selection; they do not offer a
 live requirement-detail drill.
 

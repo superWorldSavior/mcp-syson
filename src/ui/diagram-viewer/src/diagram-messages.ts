@@ -1,5 +1,21 @@
 /** Viewer commands and help; source labels and authored element states stay literal. */
 const fr: Record<string, string> = {
+  "Hold Space + drag to pan · wheel or +/− to zoom · 0 or F to fit":
+    "Maintenir Espace + glisser pour déplacer · molette ou +/− pour zoomer · 0 ou F pour ajuster",
+  "Rectangle: blocks · click: element · double-click: details":
+    "Rectangle : blocs · clic : élément · double-clic : détails",
+  "Element": "Élément",
+  "Relationship": "Relation",
+  "Diagram: select elements": "Diagramme : sélectionner les éléments",
+  "Diagram: pan": "Diagramme : déplacer la vue",
+  "Rendering details": "Détails du rendu",
+  "Rendered locally.": "Rendu local.",
+  "Click to select · drag a rectangle to add elements · double-click to inspect":
+    "Clic pour sélectionner · rectangle pour ajouter des éléments · double-clic pour examiner",
+  "Drag to pan · double-click to inspect":
+    "Glisser pour déplacer · double-clic pour examiner",
+  "Wheel or +/− to zoom · 0 or F to fit":
+    "Molette ou +/− pour zoomer · 0 ou F pour ajuster",
   "Views": "Vues",
   "Diagram": "Diagramme",
   "Diagram path": "Parcours du diagramme",

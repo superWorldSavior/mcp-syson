@@ -42,6 +42,12 @@ export function resolveSplitModules(environment = process.env) {
     environment,
     new URL("./fonts.ts", components.href).href,
   );
+  // The shared context control is being reviewed locally before its release.
+  // Require an explicit source so a build cannot silently use a different UI.
+  const contextControls = requiredFileModule(
+    "MCP_VIEW_CONTEXT_MODULE",
+    environment,
+  );
 
   const corePackage = verifyPackage(core, PACKAGE_EXPECTATIONS.core, ".");
   const contractsPackage = verifyPackage(
@@ -86,6 +92,7 @@ export function resolveSplitModules(environment = process.env) {
     componentsPreact,
     presentation,
     fonts,
+    contextControls,
     provenance,
     environment: Object.freeze({
       MCP_VIEW_MODULE: core.href,
@@ -94,6 +101,7 @@ export function resolveSplitModules(environment = process.env) {
       MCP_VIEW_COMPONENTS_PREACT_MODULE: componentsPreact.href,
       MCP_VIEW_PRESENTATION_MODULE: presentation.href,
       MCP_VIEW_COMPONENTS_FONTS_MODULE: fonts.href,
+      MCP_VIEW_CONTEXT_MODULE: contextControls.href,
     }),
   });
 }

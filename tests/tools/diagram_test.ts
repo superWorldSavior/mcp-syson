@@ -286,7 +286,7 @@ Deno.test("local topology preserves native ellipse style without inferring shape
   );
   assertStringIncludes(
     svg,
-    '<ellipse cx="10" cy="10" rx="10" ry="10" fill="#000000" stroke="#000000" stroke-width="0"',
+    '<ellipse cx="10" cy="10" rx="10" ry="10" fill="var(--mcp-view-text, currentColor)" stroke="var(--mcp-view-border-strong, currentColor)" stroke-width="0"',
   );
   assertStringIncludes(svg, 'data-node-id="initial"');
   assertStringIncludes(svg, ">Initial</text>");
@@ -383,43 +383,266 @@ Deno.test("missing native layout separates variable-height compartments and subs
   assertEquals(nextRow.y > parent.y + parent.height, true);
 });
 
-Deno.test("native hex colors normalize valid lengths and choose contrast after alpha composition", async () => {
+Deno.test("native colors cannot override the host's diagram theme", async () => {
   const { renderLocalTopology } = await import(
     "../../src/tools/diagram-renderer.ts"
   );
-  for (const background of ["#fff", "#ffff", "#ffffff", "#ffffffff"]) {
+  for (
+    const background of [
+      "#fff",
+      "#ffff",
+      "#ffffff",
+      "#ffffffff",
+      "#fff0",
+      "#ffffff00",
+      "#12345",
+      "#1234567",
+      "url(https://evil.example)",
+    ]
+  ) {
     const svg = renderLocalTopology(
       [{ ...NODES[0], style: { kind: "RectangularNodeStyle", background } }],
       [],
       "Color",
     );
-    assertStringIncludes(svg, 'fill="#141126" font-size="12">Heater</text>');
-  }
-  for (const background of ["#fff0", "#ffffff00", "#12345", "#1234567"]) {
-    const svg = renderLocalTopology(
-      [{ ...NODES[0], style: { kind: "RectangularNodeStyle", background } }],
-      [],
-      "Color",
+    assertStringIncludes(
+      svg,
+      'fill="var(--mcp-view-text, currentColor)" font-size="12">Heater</text>',
     );
-    assertStringIncludes(svg, 'fill="#e0e7ff" font-size="12">Heater</text>');
-    if (background.length === 6 || background.length === 8) {
-      assertEquals(svg.includes(`fill="${background}"`), false);
-    }
+    assertStringIncludes(svg, 'fill="var(--mcp-view-panel, #ffffff)"');
+    assertEquals(svg.includes(`fill="${background}"`), false);
+    assertEquals(svg.includes("evil.example"), false);
   }
-  const svg = renderLocalTopology(
-    [{
+});
+
+Deno.test("actual action-view structure hides repeated empty display compartments without changing semantic input", async () => {
+  const { renderLocalTopology } = await import(
+    "../../src/tools/diagram-renderer.ts"
+  );
+  const actions = ["observe", "evaluate", "actuate"].map((id, index) => ({
+    ...NODES[0],
+    id,
+    targetObjectId: `semantic-${id}`,
+    label: `«action»\n${id}`,
+    hasLayout: false,
+    x: index * 200,
+  }));
+  const empty = actions.flatMap((parent) =>
+    [
+      "doc",
+      "parameters",
+      "attributes",
+      "items",
+      "actions",
+      "action flow",
+      "perform actions",
+    ].map((label, index) => ({
+      ...NODES[0],
+      id: `${parent.id}-display-${index}`,
+      parentId: parent.id,
+      targetObjectId: parent.targetObjectId,
+      label,
+      kind: "compartment" as const,
+      hasLayout: false,
+      height: label === "action flow" ? 150 : 60,
+    }))
+  );
+  const nodes = [...actions, ...empty];
+  const svg = renderLocalTopology(nodes, [{
+    id: "first",
+    sourceId: "observe",
+    targetId: "evaluate",
+  }, { id: "second", sourceId: "evaluate", targetId: "actuate" }], "Cycle");
+  assertEquals(nodes.length, 24);
+  assertEquals((svg.match(/data-node-id=/g) ?? []).length, 3);
+  assertEquals((svg.match(/data-edge-id=/g) ?? []).length, 2);
+  assertEquals(svg.includes("action flow"), false);
+  assertEquals(svg.includes(">doc</text>"), false);
+  const viewBox = /viewBox="([^"]+)"/.exec(svg)![1].split(" ").map(Number);
+  assertEquals(viewBox[3] < 200, true);
+  assertEquals(nodes[0].height, 60);
+});
+
+Deno.test("nonempty display compartments become compact nonselectable headings while real rows and edge ports survive", async () => {
+  const { renderLocalTopology } = await import(
+    "../../src/tools/diagram-renderer.ts"
+  );
+  const nodes = [
+    {
+      ...NODES[0],
+      id: "controller",
+      targetObjectId: "semantic-controller",
+      label: "«part»\ncontroller : Controller",
+      hasLayout: false,
+    },
+    {
+      ...NODES[0],
+      id: "attributes-wrapper",
+      parentId: "controller",
+      targetObjectId: "semantic-controller",
+      label: "attributes",
+      kind: "compartment" as const,
+      hasLayout: false,
+    },
+    {
+      ...NODES[0],
+      id: "threshold-row",
+      parentId: "attributes-wrapper",
+      targetObjectId: "semantic-threshold",
+      label: "^threshold : ScalarValues::Integer = 8",
+      kind: "compartment" as const,
+      hasLayout: false,
+      height: 15,
+    },
+    {
+      ...NODES[0],
+      id: "ports-wrapper",
+      parentId: "controller",
+      targetObjectId: "semantic-controller",
+      label: "ports",
+      kind: "compartment" as const,
+      hasLayout: false,
+    },
+    {
+      ...NODES[0],
+      id: "input-row",
+      parentId: "ports-wrapper",
+      targetObjectId: "semantic-input",
+      label: "^in input : Signal",
+      kind: "compartment" as const,
+      hasLayout: false,
+      height: 15,
+    },
+    {
+      ...NODES[0],
+      id: "input-border",
+      parentId: "controller",
+      targetObjectId: "semantic-input",
+      label: "",
+      kind: "port" as const,
+      hasLayout: false,
+      width: 10,
+      height: 10,
+    },
+    {
+      ...NODES[0],
+      id: "sensor",
+      targetObjectId: "semantic-sensor",
+      label: "Sensor",
+      hasLayout: false,
+    },
+  ];
+  const svg = renderLocalTopology(nodes, [{
+    id: "connection",
+    targetObjectId: "semantic-connection",
+    sourceId: "sensor",
+    targetId: "input-border",
+  }], "Architecture");
+  assertEquals(svg.includes('data-node-id="attributes-wrapper"'), false);
+  assertStringIncludes(svg, ">attributes</text>");
+  assertStringIncludes(
+    svg,
+    'data-node-id="threshold-row" data-target-object-id="semantic-threshold"',
+  );
+  assertStringIncludes(
+    svg,
+    'data-node-id="input-border" data-target-object-id="semantic-input"',
+  );
+  assertStringIncludes(
+    svg,
+    'data-edge-id="connection" data-target-object-id="semantic-connection"',
+  );
+  assertEquals((svg.match(/data-edge-id=/g) ?? []).length, 1);
+  const viewBox = /viewBox="([^"]+)"/.exec(svg)![1].split(" ").map(Number);
+  assertEquals(viewBox[3] < 350, true);
+});
+
+Deno.test("fallback parents reserve distinct slots for every border port", async () => {
+  const { renderLocalTopology } = await import(
+    "../../src/tools/diagram-renderer.ts"
+  );
+  const nodes = [
+    {
       ...NODES[0],
       id: "parent",
-      style: { kind: "RectangularNodeStyle", background: "#fff" },
-    }, {
+      targetObjectId: "parent-semantic",
+      hasLayout: false,
+      height: 60,
+    },
+    ...Array.from({ length: 3 }, (_, index) => ({
       ...NODES[0],
-      id: "child",
-      label: "Inherited",
+      id: `port-${index}`,
       parentId: "parent",
-      style: { kind: "RectangularNodeStyle", background: "#fff0" },
-    }],
-    [],
-    "Color",
+      targetObjectId: `port-semantic-${index}`,
+      kind: "port" as const,
+      label: `Port ${index}`,
+      hasLayout: false,
+      width: 10,
+      height: 10,
+    })),
+  ];
+  const svg = renderLocalTopology(nodes, [], "Ports");
+  const bounds = (id: string) => {
+    const group = svg.split(`data-node-id="${id}"`)[1].split("</g>")[0];
+    const rect =
+      /<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/.exec(
+        group,
+      )!;
+    return { y: Number(rect[2]), height: Number(rect[4]) };
+  };
+  const parent = bounds("parent"),
+    ports = [0, 1, 2].map((index) => bounds(`port-${index}`));
+  assertEquals(new Set(ports.map((port) => port.y)).size, 3);
+  assertEquals(
+    ports.every((port) => port.y + port.height < parent.y + parent.height),
+    true,
   );
-  assertStringIncludes(svg, 'fill="#141126" font-size="12">Inherited</text>');
+  assertEquals(ports[0].y + ports[0].height < ports[1].y, true);
+  assertEquals(ports[1].y + ports[1].height < ports[2].y, true);
+});
+
+Deno.test("border ports keep accessible identity but omit text duplicated in a semantic row", async () => {
+  const { renderLocalTopology } = await import(
+    "../../src/tools/diagram-renderer.ts"
+  );
+  const nodes = [{
+    ...NODES[0],
+    id: "controller",
+    targetObjectId: "controller-semantic",
+    hasLayout: false,
+  }, {
+    ...NODES[0],
+    id: "ports",
+    parentId: "controller",
+    targetObjectId: "controller-semantic",
+    kind: "compartment" as const,
+    label: "ports",
+    hasLayout: false,
+  }, {
+    ...NODES[0],
+    id: "input-row",
+    parentId: "ports",
+    targetObjectId: "input-semantic",
+    kind: "compartment" as const,
+    label: "in input : Signal",
+    hasLayout: false,
+  }, {
+    ...NODES[0],
+    id: "input-border",
+    parentId: "controller",
+    targetObjectId: "input-semantic",
+    kind: "port" as const,
+    label: "",
+    outsideLabels: ["input : Signal"],
+    hasLayout: false,
+    width: 10,
+    height: 10,
+  }];
+  const svg = renderLocalTopology(nodes, [], "Ports");
+  const port = svg.split('data-node-id="input-border"')[1].split("</g>")[0];
+  assertStringIncludes(port, 'data-target-object-id="input-semantic"');
+  assertStringIncludes(port, 'data-label="input : Signal"');
+  assertStringIncludes(port, "<title>input : Signal</title>");
+  assertEquals(port.includes("<text"), false);
+  assertEquals((svg.match(/>in input : Signal<\/text>/g) ?? []).length, 1);
 });

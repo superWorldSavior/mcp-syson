@@ -189,3 +189,289 @@ Deno.test("drag threshold stays latched after moving out and returning near orig
   assertEquals(dragCrossedThreshold(dragged, start, start), true);
   assertEquals(dragCrossedThreshold(false, start, start), false);
 });
+
+Deno.test("semantic eligibility excludes same-target decorative compartments and preserves real children", async () => {
+  const { selectableDiagramMembers, uniqueSemanticMembers } = await import(
+    "../src/ui/diagram-viewer/src/diagram-model.ts"
+  );
+  const nodes = [
+    { id: "part", kind: "node", targetObjectId: "part-semantic" },
+    {
+      id: "doc",
+      kind: "compartment",
+      parentId: "part",
+      targetObjectId: "part-semantic",
+    },
+    {
+      id: "attribute",
+      kind: "compartment",
+      parentId: "part",
+      targetObjectId: "attribute-semantic",
+    },
+    {
+      id: "port",
+      kind: "port",
+      parentId: "part",
+      targetObjectId: "port-semantic",
+    },
+    { id: "part-second", kind: "node", targetObjectId: "part-semantic" },
+  ];
+  const eligible = selectableDiagramMembers(nodes, [{
+    id: "edge",
+    kind: "edge",
+    targetObjectId: "relationship",
+  }]);
+  assertEquals(eligible.map((node) => node.id), [
+    "part",
+    "attribute",
+    "port",
+    "part-second",
+    "edge",
+  ]);
+  assertEquals(uniqueSemanticMembers(eligible).map((node) => node.id), [
+    "part",
+    "attribute",
+    "port",
+    "edge",
+  ]);
+});
+Deno.test("intrinsic SVG dimensions prevent a second responsive fit and center zoom stays anchored", async () => {
+  const { svgIntrinsicSize, zoomDiagram } = await import(
+    "../src/ui/diagram-viewer/src/diagram-model.ts"
+  );
+  assertEquals(svgIntrinsicSize("-36 -72 855 1383", "855", "1383"), {
+    width: 855,
+    height: 1383,
+  });
+  const fit = fitDiagram({ x: 0, y: 0, width: 855, height: 1383 }, {
+    width: 732,
+    height: 537,
+  });
+  assertAlmostEquals(fit.scale, 489 / 1383);
+  const zoom = zoomDiagram(0.5, { x: 20, y: 30 }, 2, { x: 300, y: 200 });
+  assertEquals(zoom, { scale: 1, x: -260, y: -140 });
+  assertAlmostEquals((300 - zoom.x) / zoom.scale, (300 - 20) / 0.5);
+  assertAlmostEquals((200 - zoom.y) / zoom.scale, (200 - 30) / 0.5);
+});
+
+Deno.test("Pan double-click preserves acknowledged selection from an earlier Select click", async () => {
+  const { createDiagramGesture } = await import(
+    "../src/ui/diagram-viewer/src/diagram-gesture.ts"
+  );
+  const { createSelectionController } = await import(
+    "../src/ui/shared/selection.ts"
+  );
+  const controller = createSelectionController({
+    rootId: "ec",
+    updateModelContext: () => Promise.resolve({}),
+  });
+  const item = {
+    reference: { domain: "sysml", kind: "element", id: "A" },
+    label: "A",
+  };
+  let opened = 0;
+  createDiagramGesture(controller, item, () => {
+    opened++;
+  }, "select").onClick({ detail: 1 });
+  await controller.setItems([], "add");
+  assertEquals(
+    controller.getSnapshot().items.map((item) => item.reference.id),
+    ["A"],
+  );
+  const pan = createDiagramGesture(controller, item, () => {
+    opened++;
+  }, "pan");
+  pan.onClick({ detail: 1 });
+  pan.onClick({ detail: 2 });
+  pan.onDoubleClick();
+  await controller.setItems([], "add");
+  assertEquals(opened, 1);
+  assertEquals(
+    controller.getSnapshot().items.map((item) => item.reference.id),
+    ["A"],
+  );
+});
+
+Deno.test("readable diagram labels use authored port text and endpoint paths without UUID primary labels", async () => {
+  const { readableDiagramMembers } = await import(
+    "../src/ui/diagram-viewer/src/diagram-model.ts"
+  );
+  const nodes = [{
+    id: "sensor-graphic",
+    targetObjectId: "sensor-id",
+    kind: "node",
+    label: "sensor",
+  }, {
+    id: "ports-wrapper",
+    targetObjectId: "sensor-id",
+    kind: "compartment",
+    parentId: "sensor-graphic",
+    label: "ports",
+  }, {
+    id: "output-graphic",
+    targetObjectId: "output-id",
+    kind: "port",
+    parentId: "ports-wrapper",
+    label: " ",
+    outsideLabels: [" ", "^output : Signal"],
+  }, {
+    id: "controller-graphic",
+    targetObjectId: "controller-id",
+    label: "controller",
+  }, {
+    id: "input-graphic",
+    targetObjectId: "input-id",
+    parentId: "controller-graphic",
+    outsideLabels: ["input"],
+  }, { id: "unlabeled-graphic", targetObjectId: "unlabeled-id", label: "" }];
+  const edges = [{
+    id: "edge",
+    targetObjectId: "edge-id",
+    sourceId: "output-graphic",
+    targetId: "input-graphic",
+  }, {
+    id: "unknown-edge",
+    targetObjectId: "unknown-edge-id",
+    sourceId: "missing",
+  }];
+  const members = readableDiagramMembers(nodes, edges, {
+    element: "Element",
+    relationship: "Relationship",
+  });
+  assertEquals(
+    members.find((member) => member.id === "output-graphic")?.label,
+    "^output : Signal",
+  );
+  assertEquals(
+    members.find((member) => member.id === "edge")?.label,
+    "sensor.^output : Signal → controller.input",
+  );
+  assertEquals(
+    members.find((member) => member.id === "unlabeled-graphic")?.label,
+    "Element",
+  );
+  assertEquals(
+    members.find((member) => member.id === "unknown-edge")?.label,
+    "Relationship",
+  );
+  assertEquals(
+    members.find((member) => member.id === "output-graphic")?.targetObjectId,
+    "output-id",
+  );
+  assertEquals(members.some((member) => member.id === "ports-wrapper"), false);
+});
+
+Deno.test("marquee takes primary blocks only while click keeps fine-grained semantic members", async () => {
+  const {
+    readableDiagramMembers,
+    marqueeDiagramMembers,
+    semanticDiagramMember,
+    uniqueSemanticMembers,
+    whollyEnclosed,
+  } = await import("../src/ui/diagram-viewer/src/diagram-model.ts");
+  const nodes = [
+    { id: "part-a", kind: "node", targetObjectId: "A", label: "A" },
+    { id: "part-b", kind: "node", targetObjectId: "B", label: "B" },
+    { id: "part-c", kind: "node", targetObjectId: "C", label: "C" },
+    { id: "part-a-copy", kind: "node", targetObjectId: "A", label: "A" },
+    {
+      id: "row-a",
+      kind: "compartment",
+      parentId: "part-a",
+      targetObjectId: "attribute-a",
+      label: "attribute",
+    },
+    {
+      id: "port-a",
+      kind: "port",
+      parentId: "part-a",
+      targetObjectId: "port-a-semantic",
+      label: "port",
+    },
+    { id: "old-kindless", targetObjectId: "old", label: "old" },
+  ];
+  const edges = [{
+    id: "link",
+    targetObjectId: "relationship",
+    sourceId: "port-a",
+    targetId: "part-b",
+  }];
+  const all = readableDiagramMembers(nodes, edges, {
+    element: "Element",
+    relationship: "Relationship",
+  });
+  const box = { x: 0, y: 0, width: 200, height: 200 };
+  // Both blocks and all their small rows, ports and links are enclosed; C is outside.
+  const enclosed = all.filter((member) =>
+    whollyEnclosed(box, {
+      x: member.id === "part-c" ? 300 : 20,
+      y: 20,
+      width: 40,
+      height: 40,
+    })
+  );
+  assertEquals(
+    uniqueSemanticMembers(marqueeDiagramMembers(enclosed)).map((member) =>
+      member.targetObjectId
+    ),
+    ["A", "B"],
+  );
+  assertEquals(
+    semanticDiagramMember(all, "row-a")?.targetObjectId,
+    "attribute-a",
+  );
+  assertEquals(
+    semanticDiagramMember(all, "port-a")?.targetObjectId,
+    "port-a-semantic",
+  );
+  assertEquals(
+    semanticDiagramMember(all, "link")?.targetObjectId,
+    "relationship",
+  );
+});
+
+Deno.test("Space pan latches a drag until completion, releases cleanly, and never toggles selection", async () => {
+  const { createDiagramPanState, acceptsDiagramSpace } = await import(
+    "../src/ui/diagram-viewer/src/diagram-model.ts"
+  );
+  const { createDiagramGesture } = await import(
+    "../src/ui/diagram-viewer/src/diagram-gesture.ts"
+  );
+  const { createSelectionController } = await import(
+    "../src/ui/shared/selection.ts"
+  );
+  const pan = createDiagramPanState();
+  assertEquals(acceptsDiagramSpace(" ", false, true), true);
+  assertEquals(acceptsDiagramSpace(" ", true, true), false);
+  assertEquals(acceptsDiagramSpace(" ", false, false), false);
+  pan.press();
+  assertEquals(pan.effective("select"), "pan");
+  assertEquals(pan.begin("select"), "pan");
+  pan.release();
+  assertEquals(pan.effective("select"), "pan");
+  pan.end();
+  assertEquals(pan.effective("select"), "select");
+  pan.press();
+  pan.begin("select");
+  pan.reset();
+  assertEquals(pan.effective("select"), "select");
+  assertEquals(pan.held, false);
+  const controller = createSelectionController({
+    rootId: "ec",
+    updateModelContext: () => Promise.resolve({}),
+  });
+  const item = {
+    reference: { domain: "sysml", kind: "element", id: "A" },
+    label: "A",
+  };
+  let prevented = false;
+  createDiagramGesture(controller, item, () => {}, "select").onKeyDown({
+    key: " ",
+    preventDefault() {
+      prevented = true;
+    },
+  });
+  assertEquals(prevented, true);
+  await controller.setItems([], "add");
+  assertEquals(controller.getSnapshot().items, []);
+});

@@ -1,3 +1,4 @@
+import { svgIntrinsicSize } from "./diagram-model.ts";
 /** Strict browser-side admission for SysON diagram snapshots. */
 
 const MAX_SVG_BYTES = 2_000_000;
@@ -216,6 +217,16 @@ export function sanitizeDiagramSvg(
       const reason = inspectDiagramSvgAttribute(name, value);
       if (reason) return { status: "unavailable", reason };
     }
+  }
+
+  const intrinsic = svgIntrinsicSize(
+    root.getAttribute("viewBox"),
+    root.getAttribute("width"),
+    root.getAttribute("height"),
+  );
+  if (intrinsic) {
+    root.setAttribute("width", String(intrinsic.width));
+    root.setAttribute("height", String(intrinsic.height));
   }
 
   // Annotate the detached admitted document from the snapshot's identity table.

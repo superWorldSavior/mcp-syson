@@ -48,13 +48,23 @@ The path retains earlier levels and their filters and scroll positions. Empty
 children, loading, rejected results and read failures remain explicit. Responses
 from a superseded root or abandoned level cannot replace the current branch.
 
-Model and diagram selection uses provider element identities. Click and Space
-toggle an item; double-click and Enter inspect while preserving the preceding
-selection. Inspection does not implicitly select. The basket belongs to the
-viewer root and survives local navigation and language changes. A new root
-invalidates old handlers and queues an empty context replacement. Diagram Select
-mode also adds fully enclosed semantic elements through a background selection
-rectangle; Pan mode moves the canvas.
+Model and diagram selection uses provider element identities. Click toggles an
+item; double-click and Enter inspect while preserving the preceding selection.
+Space toggles items in the model explorer. In diagrams, holding Space while
+dragging temporarily pans the canvas; releasing Space restores the chosen mode.
+Inspection does not implicitly select. The basket belongs to the viewer root and
+survives local navigation and language changes. A new root invalidates old
+handlers and queues an empty context replacement. Diagram Select mode adds fully
+enclosed primary diagram blocks (parts in an architecture view) through a
+background selection rectangle. Internal rows, ports and relationships remain
+available through individual clicks; Pan mode moves the canvas.
+
+The local preview reuses MCP View's `ActiveContextChip` for the compact context
+signal, remove controls and selection popover. `SelectionBasket` only adapts the
+SysON controller and localized labels to that component. Decorative compartments
+that repeat their parent's semantic identity are not independent selection
+targets. Native text selection and SVG dragging are disabled inside the canvas;
+text in the surrounding panels remains selectable.
 
 The diagram chooser separates existing representations (`syson_diagram_list`)
 from available native types for its target (`syson_diagram_types`). A type is
@@ -65,6 +75,9 @@ Snapshot data retains representation metadata, nested nodes and layout data when
 supplied. The subscription bounds child-node recursion to depth 8. Local SVG
 rendering approximates the native diagram using the supplied topology and
 coordinates; it does not reproduce every native style or editor interaction.
+Empty display compartments are omitted from the local projection; populated
+compartments keep their content. The original snapshot remains unchanged. Fit
+and zoom use a single transform of the SVG's intrinsic dimensions.
 
 Live navigation requires the host's `serverTools` capability plus the relevant
 editing-context identifier. Recorded sessions make no provider calls, including
@@ -217,7 +230,16 @@ For a standard sibling `mcp-server` checkout:
 ```bash
 export MCP_VIEW_MODULE=file:///absolute/path/to/mcp-server/packages/view/mod.ts
 export MCP_VIEW_COMPONENTS_MODULE=file:///absolute/path/to/mcp-server/packages/view-components/mod.ts
+export MCP_VIEW_CONTEXT_MODULE=file:///absolute/path/to/local-context-preview/preact-context.ts
 ```
+
+`MCP_VIEW_CONTEXT_MODULE` is an explicit local preview of the shared context
+control extraction. It exports `ActiveContextChip`, its presentation types and
+`MCP_VIEW_CONTEXT_BASKET_CSS`, without importing another MCP Apps lifecycle.
+This control is not part of the pinned components release above. The preview
+records `casys-mcp-view-context=local-preview` in generated HTML. A reproducible
+released dependency and CI pin are required before this iteration can be
+published; the current CI pin alone does not supply this entry point.
 
 The resolver derives the contracts, Preact adapter and presentation entry points
 from those package exports. Alternate layouts may set

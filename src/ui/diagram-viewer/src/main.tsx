@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  Disclosure,
   ElementIdent,
   ElementProvenance,
   ElementReading,
@@ -12,7 +13,6 @@ import {
   SemanticElement,
   SemanticList,
   StateMessage,
-  Toolbar,
 } from "@casys/mcp-view-components/preact/components";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
@@ -31,20 +31,28 @@ import {
   type SysonViewData,
 } from "../../shared/preact-surface";
 import { isDiagramSnapshot } from "../../shared/recorded-content";
+import { DiagramToolbar } from "./DiagramToolbar";
 import { diagramMessages } from "./diagram-messages";
 import { SelectionBasket } from "../../shared/SelectionBasket";
 import { useSysonSelection } from "../../shared/selection-hooks";
+import { createDiagramGesture } from "./diagram-gesture";
 import { createSelectionGesture } from "../../shared/selection-gesture";
 import {
+  acceptsDiagramSpace,
+  createDiagramPanState,
   diagramNavigationAllowed,
   dragCrossedThreshold,
   fitDiagram,
+  marqueeDiagramMembers,
   pointerToDiagram,
+  readableDiagramMembers,
   rectangleBetween,
   semanticDiagramMember,
   syncDiagramSelection,
   toolContent,
+  uniqueSemanticMembers,
   whollyEnclosed,
+  zoomDiagram,
 } from "./diagram-model";
 import { sanitizeDiagramSvg } from "./sanitize-svg";
 import "../../global.css";
@@ -54,6 +62,11 @@ interface DiagramNode {
   label: string;
   targetObjectId?: string;
   type?: string;
+  kind?: string;
+  parentId?: string;
+  outsideLabels?: string[];
+  sourceId?: string;
+  targetId?: string;
 }
 
 interface DiagramSnapshot extends Record<string, unknown> {
@@ -153,7 +166,7 @@ function useDetail(
         label={dt("Diagram path")}
         items={[{ id: data.diagramId, label: data.diagramLabel }, {
           id: detail.targetObjectId!,
-          label: detail.label || detail.targetObjectId,
+          label: detail.label || dt("Element"),
         }]}
         currentId={detail.targetObjectId!}
         onSelect={(id) => {
@@ -164,8 +177,9 @@ function useDetail(
         }}
       />
       <p>
-        {detail.label || detail.targetObjectId} ·{" "}
-        {detail.type || dt("SysML element")} · {detail.targetObjectId}
+        {detail.label || dt("Element")} · {detail.type || dt("SysML element")} ·
+        {" "}
+        {detail.targetObjectId}
       </p>
       {content && (
         <SemanticElement
@@ -173,9 +187,9 @@ function useDetail(
           density="card"
           ident={
             <ElementIdent
-              label={typeof content.label === "string"
+              label={typeof content.label === "string" && content.label.trim()
                 ? content.label
-                : detail.label || detail.targetObjectId!}
+                : detail.label || dt("Element")!}
               detail={typeof content.kind === "string"
                 ? content.kind
                 : detail.type}
@@ -310,7 +324,11 @@ function ViewChooser(
     }
   };
   return (
-    <Card title={dt("Views")}>
+    <Disclosure
+      label={`${dt("Views")} · ${
+        data.metadata?.description?.label || dt("Diagram")
+      }`}
+    >
       <p>
         {data.metadata?.description?.label || dt("Diagram")} ·{" "}
         {data.diagramLabel}
@@ -361,7 +379,7 @@ function ViewChooser(
           {error}
         </StateMessage>
       )}
-    </Card>
+    </Disclosure>
   );
 }
 
@@ -420,23 +438,52 @@ function Visual(
   const dragStart = useRef({ x: 0, y: 0 });
   const pointerStart = useRef({ x: 0, y: 0 });
   const [mode, setMode] = useState<"select" | "pan">("select");
+  const panState = useRef(createDiagramPanState());
+  const [, refreshPan] = useState(0);
+  const activeMode = panState.current.effective(mode);
+  const resetPan = () => {
+    panState.current.reset();
+    refreshPan((value) => value + 1);
+  };
   const [marquee, setMarquee] = useState<
     { x: number; y: number; width: number; height: number }
   >();
   const suppressClick = useRef(false);
   const pressedMember = useRef<DiagramNode>();
+  const pressedMode = useRef<"select" | "pan">("select");
   const cancelDrag = () => {
     activePointer.current = undefined;
     setDragging(false);
     setMarquee(undefined);
+    panState.current.end();
   };
   const activePointer = useRef<number>();
   const transformRef = useRef({ scale, translate });
   transformRef.current = { scale, translate };
 
+  useEffect(() => {
+    const release = (event: KeyboardEvent) => {
+      if (event.key === " ") {
+        panState.current.release();
+        refreshPan((value) => value + 1);
+      }
+    };
+    const blur = () => {
+      resetPan();
+      cancelDrag();
+      suppressClick.current = true;
+    };
+    window.addEventListener("keyup", release);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keyup", release);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
+
   const fit = useCallback(() => {
     const container = containerRef.current;
-    const svg = container?.querySelector("svg");
+    const svg = container?.querySelector(".syson-diagram-stage > svg");
     if (!container || !svg) return;
     const rect = svg.getBoundingClientRect();
     const canvas = container.getBoundingClientRect();
@@ -467,7 +514,10 @@ function Visual(
     data.editingContextId || data.diagramId,
   );
   const { open, panel } = useDetail(context, data);
-  const members = [...data.nodes, ...(data.edges || [])];
+  const members = readableDiagramMembers(data.nodes, data.edges || [], {
+    element: dt("Element"),
+    relationship: dt("Relationship"),
+  });
   const memberAt = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return undefined;
     const group = target.closest("[data-node-id], [data-edge-id]");
@@ -478,23 +528,44 @@ function Visual(
     );
   };
   const gestureFor = (member: DiagramNode) =>
-    createSelectionGesture(controller, {
+    createDiagramGesture(controller, {
       reference: sysmlRef(
         "element",
         member.targetObjectId!,
         recordedProjectionDigest(context),
       ),
-      label: member.label || member.targetObjectId!,
-    }, () => open(member));
+      label: member.label || dt("Element"),
+    }, () =>
+      open(member), mode);
 
-  const zoomBy = useCallback((factor: number) => {
-    setScale((value) => Math.min(Math.max(value * factor, 0.1), 5));
-  }, []);
+  const zoomBy = useCallback(
+    (factor: number, anchor?: { x: number; y: number }) => {
+      const container = containerRef.current;
+      if (!container) return;
+      const current = transformRef.current;
+      const next = zoomDiagram(
+        current.scale,
+        current.translate,
+        factor,
+        anchor ||
+          { x: container.clientWidth / 2, y: container.clientHeight / 2 },
+      );
+      setScale(next.scale);
+      setTranslate({ x: next.x, y: next.y });
+    },
+    [],
+  );
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
     if (activePointer.current !== undefined) return;
-    zoomBy(event.deltaY > 0 ? 0.9 : 1.1);
+    const container = containerRef.current;
+    if (!container) return;
+    const bounds = container.getBoundingClientRect();
+    zoomBy(event.deltaY > 0 ? 0.9 : 1.1, {
+      x: event.clientX - bounds.left - container.clientLeft,
+      y: event.clientY - bounds.top - container.clientTop,
+    });
   }, [zoomBy]);
   useEffect(() => {
     const node = containerRef.current;
@@ -535,55 +606,45 @@ function Visual(
   return (
     <>
       <style>
-        {`.syson-diagram-stage g[data-selected="true"] { filter: drop-shadow(0 0 3px var(--mcp-view-accent, #0d7c8a)) drop-shadow(0 0 1px var(--mcp-view-accent, #0d7c8a)); }`}
+        {`.syson-diagram-stage g[data-selected="true"] { outline: 2px solid var(--mcp-view-accent, #0d7c8a); outline-offset: 3px; }
+.syson-diagram-stage g[data-selected="true"] > :is(rect,ellipse,circle,polygon,path,line,polyline) { stroke: var(--mcp-view-accent, #0d7c8a); stroke-width: 2.5px; }`}
       </style>
       <ViewChooser data={data} context={context} onSwitch={onSwitch} />
       {data.rendererWarning && (
-        <StateMessage tone="warning" title={t("rendererWarning")}>
-          {data.rendererWarning}
-        </StateMessage>
+        <Disclosure label={dt("Rendering details")}>
+          <StateMessage
+            tone={/failed|unavailable|rejected/i.test(data.rendererWarning)
+              ? "warning"
+              : "neutral"}
+            title={t("renderer")}
+          >
+            {/disabled/i.test(data.rendererWarning) &&
+                !/failed/i.test(data.rendererWarning)
+              ? dt("Rendered locally.")
+              : data.rendererWarning}
+          </StateMessage>
+        </Disclosure>
       )}
       <Card
         className="syson-diagram-card"
         title={data.diagramLabel || t("diagramFallback")}
-        actions={
-          <Toolbar label={t("zoomControls")}>
-            <Button
-              aria-pressed={mode === "select"}
-              onClick={() => {
-                cancelDrag();
-                setMode("select");
-              }}
-            >
-              {dt("Select")}
-            </Button>
-            <Button
-              aria-pressed={mode === "pan"}
-              onClick={() => {
-                cancelDrag();
-                setMode("pan");
-              }}
-            >
-              {dt("Pan")}
-            </Button>
-            <Button title={t("zoomIn")} onClick={() => zoomBy(1.2)}>
-              {t("zoomIn")}
-            </Button>
-            <Button title={t("zoomOut")} onClick={() => zoomBy(0.8)}>
-              {t("zoomOut")}
-            </Button>
-            <Button title={t("fitRecordedSvg")} onClick={fit}>
-              {t("fit")}
-            </Button>
-            <Badge tone="info">{Math.round(scale * 100)}%</Badge>
-          </Toolbar>
-        }
       >
+        <div className="syson-diagram-contextbar">
+          <SelectionBasket
+            context={context}
+            controller={controller}
+            snapshot={snapshot}
+          />
+        </div>
         <div
           ref={containerRef}
-          aria-label={t("diagramCanvasAria")}
+          aria-label={dt(
+            activeMode === "select"
+              ? "Diagram: select elements"
+              : "Diagram: pan",
+          )}
           className={`syson-diagram-canvas ${
-            mode === "select"
+            activeMode === "select"
               ? "cursor-crosshair"
               : dragging
               ? "cursor-grabbing"
@@ -591,24 +652,62 @@ function Visual(
           }`}
           role="group"
           tabIndex={0}
+          onDragStart={(event) => event.preventDefault()}
           onClick={(event) => {
             if (suppressClick.current) {
               suppressClick.current = false;
               event.preventDefault();
               return;
             }
+            if (mode !== "select") return;
             const member = memberAt(event.target) || pressedMember.current;
             if (member) gestureFor(member).onClick(event);
           }}
           onDblClick={(event) => {
             if (suppressClick.current) return;
             const member = memberAt(event.target) || pressedMember.current;
+            if (member && pressedMode.current === "pan") {
+              void open(member);
+              return;
+            }
             if (member) gestureFor(member).onDoubleClick();
           }}
+          onBlur={(event) => {
+            if (
+              !(event.relatedTarget instanceof Node) ||
+              !event.currentTarget.contains(event.relatedTarget)
+            ) {
+              resetPan();
+              cancelDrag();
+              suppressClick.current = true;
+            }
+          }}
           onKeyDown={(event) => {
+            const target = event.target;
+            const editable = target instanceof Element &&
+              !!target.closest(
+                "input,textarea,select,[contenteditable]:not([contenteditable='false'])",
+              );
+            if (
+              acceptsDiagramSpace(
+                event.key,
+                editable,
+                event.currentTarget.contains(target as Node),
+              )
+            ) {
+              event.preventDefault();
+              panState.current.press();
+              refreshPan((value) => value + 1);
+              return;
+            }
+            if (editable) return;
             const member = memberAt(event.target);
             if (member) {
-              gestureFor(member).onKeyDown(event);
+              if (mode === "select" || event.key === "Enter") {
+                gestureFor(
+                  member,
+                ).onKeyDown(event);
+              }
               return;
             }
             if (event.key === "+" || event.key === "=") {
@@ -626,6 +725,7 @@ function Visual(
             if (event.button !== 0) return;
             suppressClick.current = false;
             pressedMember.current = memberAt(event.target);
+            pressedMode.current = panState.current.begin(mode);
             activePointer.current = event.pointerId;
             event.currentTarget.setPointerCapture(event.pointerId);
             pointerStart.current = { x: event.clientX, y: event.clientY };
@@ -644,7 +744,7 @@ function Visual(
               point,
             );
             if (!suppressClick.current) return;
-            if (mode === "pan") {
+            if (panState.current.effective(mode) === "pan") {
               setTranslate({
                 x: event.clientX - dragStart.current.x,
                 y: event.clientY - dragStart.current.y,
@@ -679,8 +779,9 @@ function Visual(
               pointerStart.current,
               end,
             );
-            suppressClick.current = dragged;
-            if (mode === "select" && dragged) {
+            const dragMode = panState.current.effective(mode);
+            suppressClick.current = dragged || dragMode === "pan";
+            if (dragMode === "select" && dragged) {
               const viewport = container.getBoundingClientRect();
               const origin = {
                 left: viewport.left + container.clientLeft,
@@ -693,6 +794,9 @@ function Visual(
                 pointerToDiagram(pointerStart.current, origin, transform),
                 pointerToDiagram(end, origin, transform),
               );
+              const primaryIds = new Set(
+                marqueeDiagramMembers(members).map((member) => member.id),
+              );
               const enclosed = new Map<string, DiagramNode>();
               for (
                 const group of container.querySelectorAll<SVGGElement>(
@@ -700,7 +804,7 @@ function Visual(
                 )
               ) {
                 const member = memberAt(group);
-                if (!member) continue;
+                if (!member || !primaryIds.has(member.id)) continue;
                 const bounds = group.getBoundingClientRect();
                 const rect = rectangleBetween(
                   pointerToDiagram(
@@ -729,7 +833,7 @@ function Visual(
                       member.targetObjectId!,
                       recordedProjectionDigest(context),
                     ),
-                    label: member.label || member.targetObjectId!,
+                    label: member.label || dt("Element"),
                   })),
                   "add",
                 );
@@ -743,12 +847,35 @@ function Visual(
           }}
           onPointerCancel={() => {
             suppressClick.current = true;
+            resetPan();
             cancelDrag();
           }}
           onLostPointerCapture={() => {
-            cancelDrag();
+            if (activePointer.current !== undefined) {
+              resetPan();
+              suppressClick.current = true;
+              cancelDrag();
+            }
           }}
         >
+          <DiagramToolbar
+            mode={activeMode}
+            scale={scale}
+            labels={{
+              toolbar: t("zoomControls"),
+              select: dt("Select"),
+              pan: dt("Pan"),
+              minus: t("zoomOut"),
+              plus: t("zoomIn"),
+              fit: t("fit"),
+            }}
+            onMode={(next) => {
+              cancelDrag();
+              setMode(next);
+            }}
+            onZoom={zoomBy}
+            onFit={fit}
+          />
           {marquee && (
             <div
               aria-hidden="true"
@@ -777,15 +904,14 @@ function Visual(
             dangerouslySetInnerHTML={{ __html: admitted.markup }}
           />
         </div>
-        <SelectionBasket
-          context={context}
-          controller={controller}
-          snapshot={snapshot}
-        />
         {panel}
         <p className="syson-diagram-help">
-          {t("diagramHelp")} {dt(
-            "Drag background to add fully enclosed elements. Switch to Pan to move the diagram.",
+          {dt(
+            mode === "select"
+              ? "Rectangle: blocks · click: element · double-click: details"
+              : "Drag to pan · double-click to inspect",
+          )} · {dt(
+            "Hold Space + drag to pan · wheel or +/− to zoom · 0 or F to fit",
           )}
         </p>
       </Card>
@@ -806,8 +932,11 @@ function Elements(
   );
   const { open, panel } = useDetail(context, data);
   const dt = diagramMessages(context.hostContext.locale);
-  const members = [...data.nodes, ...(data.edges || [])];
-  const semantic = members.filter((node) => node.targetObjectId?.trim());
+  const members = readableDiagramMembers(data.nodes, data.edges || [], {
+    element: dt("Element"),
+    relationship: dt("Relationship"),
+  });
+  const semantic = uniqueSemanticMembers(members);
   return (
     <Card
       title={t("diagramElements")}
@@ -828,7 +957,7 @@ function Elements(
               node.targetObjectId!,
               recordedProjectionDigest(context),
             ),
-            label: node.label || node.targetObjectId!,
+            label: node.label || dt("Element"),
           };
           const gesture = createSelectionGesture(controller, item, () =>
             open(node));

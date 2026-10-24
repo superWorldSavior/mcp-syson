@@ -37,6 +37,10 @@ export default defineConfig({
             content: split.provenance,
           },
           injectTo: "head",
+        }, {
+          tag: "meta",
+          attrs: { name: "casys-mcp-view-context", content: "local-preview" },
+          injectTo: "head",
         }],
       },
     },
@@ -51,6 +55,7 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       "@casys/mcp-view-components/preact/components": split.presentation.path,
+      "@casys/mcp-view-components/preact/context": split.contextControls.path,
       "@casys/mcp-view-components/preact": split.componentsPreact.path,
       "@casys/mcp-view-components/fonts": split.fonts.path,
       "@casys/mcp-view-components": split.components.path,

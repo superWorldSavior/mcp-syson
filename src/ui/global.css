@@ -68,14 +68,14 @@ input {
 }
 
 .syson-diagram-card {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .syson-diagram-canvas {
   position: relative;
   width: 100%;
-  min-height: clamp(240px, 48cqi, 420px);
-  max-height: 560px;
+  height: clamp(300px, 48cqi, 560px);
+  min-height: 300px;
   overflow: hidden;
   border: 1px solid var(--mcp-view-border, #dbe3e7);
   border-radius: var(--mcp-view-radius, 0.5rem);
@@ -83,31 +83,42 @@ input {
   background-color: var(--mcp-view-panel, #ffffff);
   background-image:
     linear-gradient(var(--mcp-view-border, #dbe3e7) 1px, transparent 1px),
-    linear-gradient(90deg, var(--mcp-view-border, #dbe3e7) 1px, transparent 1px);
+    linear-gradient(90deg, var(--mcp-view-border, #dbe3e7) 1px, transparent
+    1px);
   background-size: 24px 24px;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.syson-diagram-canvas svg,
+.syson-diagram-canvas svg * {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .syson-diagram-canvas:focus-visible {
   border-color: var(--mcp-view-accent, #0d7c8a);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mcp-view-accent, #0d7c8a) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mcp-view-accent, #0d7c8a) 16%,
+    transparent);
 }
 
 .syson-diagram-stage {
-  min-width: 100%;
-  min-height: 100%;
-  padding: clamp(0.6rem, 2.4cqi, 1.1rem);
-  transition: transform 100ms ease-out;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  padding: 0;
   will-change: transform;
 }
 
 .syson-diagram-stage svg {
   display: block;
   width: auto;
-  max-width: 100%;
+  max-width: none;
   height: auto;
-  max-height: 500px;
-  margin: 0 auto;
+  max-height: none;
+  margin: 0;
 }
 
 .syson-diagram-help {
@@ -158,4 +169,69 @@ input {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Keep context ACK changes from moving the diagram between clicks. */
+.syson-diagram-contextbar,
+.syson-diagram-contextbar > .mcp-view-toolbar {
+  min-block-size: 2.25rem;
+}
+.syson-diagram-contextbar > .mcp-view-toolbar {
+  align-items: center;
+}
+
+.syson-diagram-floating-tools {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  padding: 4px;
+  border: 1px solid var(--mcp-view-border);
+  border-radius: var(--mcp-view-radius, 8px);
+  background: var(--mcp-view-panel);
+  box-shadow: 0 2px 8px #00000014;
+}
+.syson-diagram-floating-tools .mcp-view-toolbar {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+.syson-diagram-iconbutton {
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.syson-diagram-iconbutton[aria-pressed="true"] {
+  color: var(--mcp-view-accent-text);
+  background: var(--mcp-view-subtle);
+  border-color: var(--mcp-view-accent);
+}
+.syson-diagram-toolseparator { height: 20px; border-inline-start: 1px solid var(--mcp-view-border); margin-inline: 3px; }
+.syson-diagram-zoom { min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; font-size: .75rem; color: var(--mcp-view-text-secondary); }
+.syson-diagram-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Root-level brand credit stays outside every interactive viewer surface. */
+.syson-viewer-credit {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 10px;
+}
+.syson-casys-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mcp-view-quiet);
+  font-family: var(--mcp-view-font-mono, monospace);
+  font-size: var(--mcp-view-size-chip);
+  text-decoration: none;
+}
+.syson-casys-credit img { display: block; }
+.syson-casys-credit:hover { color: var(--mcp-view-accent); }
+.syson-casys-credit:focus-visible {
+  outline: 2px solid var(--mcp-view-accent);
+  outline-offset: 2px;
+  border-radius: var(--mcp-view-radius-sm);
 }
