@@ -54,9 +54,20 @@ SysON can offer in that context. They are separate from existing
 representations; listing a type does not create a view. The chooser does not
 create one either.
 
-The local SVG renderer preserves supplied topology and coordinates where
-available, with approximate styling and layout. It is not a pixel-identical copy
-of the SysON editor. The current snapshot query bounds child-node recursion to
+The viewer draws the snapshot's structured nodes and edges itself: General,
+Interconnection, Action Flow and State Transition views, with nested parts,
+actions and states in their regions, view frames, start, done, decision, fork
+and join nodes, ports and parameters, and SysON's own edge notation. The
+snapshot holds only what SysON shows: hidden elements are left out and counted
+in `hiddenNodeCount` and `hiddenEdgeCount`. **Layout** in the "⋯" menu keeps
+SysON's positions or computes an automatic layout (ELK); the automatic one
+removes overlaps that SysON's own layout may have. Below 60 % zoom blocks show
+their header only, below 30 % a tinted outline with a readable name.
+
+The server's local SVG stays in the result for clients without MCP Apps and as
+the viewer's fallback for data it cannot draw. It preserves supplied topology
+and coordinates with approximate styling. Neither is a pixel-identical copy of
+the SysON editor. The current snapshot query bounds child-node recursion to
 depth 8; do not treat it as an unbounded model export.
 
 ## Prepare context for the next AI turn

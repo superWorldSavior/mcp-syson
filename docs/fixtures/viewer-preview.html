@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SysON requirements viewer documentation preview</title>
+    <title>SysON viewer documentation preview</title>
     <style>
     :root {
       color-scheme: light;
@@ -21,7 +21,7 @@
       color: #171917;
     }
     main {
-      width: min(760px, calc(100vw - 48px));
+      width: min(var(--viewer-width, 760px), calc(100vw - 48px));
     }
     .legend {
       display: flex;
@@ -54,20 +54,42 @@
   <body>
     <main>
       <p class="legend"><strong>Fixture</strong> Contract preview — not execution evidence</p>
-      <iframe
-        id="viewer"
-        title="SysON requirements viewer"
-        src="../../src/ui/dist/requirements-viewer/index.html"
-      ></iframe>
+      <iframe id="viewer"></iframe>
     </main>
     <script type="module">
+    // ?view= picks one committed fixture; anything else is the requirements one.
+    const VIEWS = {
+      requirements: {
+        title: "SysON requirements viewer",
+        bundle: "requirements-viewer",
+        session: "./requirements-session.json",
+        width: 760,
+        maxHeight: 640,
+      },
+      // A canvas fills what the host gives: a fixed height, set from the start.
+      diagram: {
+        title: "SysON diagram viewer",
+        bundle: "diagram-viewer",
+        session: "./diagram-session.json",
+        width: 760,
+        maxHeight: 1120,
+        height: 1120,
+      },
+    };
+    const view = VIEWS[new URLSearchParams(location.search).get("view")] ??
+      VIEWS.requirements;
+    document.title = `${view.title} documentation preview`;
+    document.documentElement.style.setProperty("--viewer-width", `${view.width}px`);
     const viewer = document.querySelector("#viewer");
+    viewer.title = view.title;
+    viewer.src = `../../src/ui/dist/${view.bundle}/index.html`;
+    if (view.height) viewer.style.height = `${view.height}px`;
     // Listen before the fixture arrives: the bundle may initialize first.
-    const session = fetch("./requirements-session.json").then((response) => {
+    const session = fetch(view.session).then((response) => {
       if (!response.ok) throw new Error(`Fixture HTTP ${response.status}`);
       return response.json();
     });
-    const MAX_HEIGHT = 640;
+    const MAX_HEIGHT = view.maxHeight;
     let initialized = false;
     window.addEventListener("message", async (event) => {
       if (event.source !== viewer.contentWindow) return;
@@ -80,11 +102,17 @@
           result: {
             protocolVersion: message.params.protocolVersion,
             hostInfo: { name: "SysON documentation harness", version: "1.0.0" },
-            hostCapabilities: {},
+            // Context updates are accepted (and dropped), like a host that
+            // keeps the selection for the model.
+            hostCapabilities: {
+              updateModelContext: { structuredContent: {}, text: {} },
+            },
             hostContext: {
               theme: "light",
               displayMode: "inline",
-              containerDimensions: { width: 760, maxHeight: MAX_HEIGHT },
+              containerDimensions: view.height
+                ? { width: view.width, height: view.height }
+                : { width: view.width, maxHeight: MAX_HEIGHT },
               locale: "en-US",
               platform: "web",
             },
@@ -92,10 +120,14 @@
         }, "*");
         return;
       }
+      if (message.method === "ui/update-model-context" && message.id !== undefined) {
+        viewer.contentWindow.postMessage({ jsonrpc: "2.0", id: message.id, result: {} }, "*");
+        return;
+      }
       if (message.method === "ui/notifications/size-changed") {
         // Follow the App's reported height up to the container limit, like a host does.
         const height = message.params?.height;
-        if (typeof height === "number") {
+        if (typeof height === "number" && !view.height) {
           viewer.style.height = `${Math.min(Math.ceil(height), MAX_HEIGHT)}px`;
         }
         return;

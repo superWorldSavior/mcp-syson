@@ -60,7 +60,7 @@ export interface SysonViewAppManifest {
   readonly app: Readonly<{
     id: "io.casys.mcp-syson";
     title: "SysON Views";
-    version: "0.8.7";
+    version: "0.9.0";
   }>;
   readonly resources: readonly Readonly<SysonViewAppResource>[];
 }
@@ -97,7 +97,7 @@ export const SYSON_VIEW_APP_MANIFEST: Readonly<SysonViewAppManifest> = Object
     app: Object.freeze({
       id: "io.casys.mcp-syson",
       title: "SysON Views",
-      version: "0.8.7",
+      version: "0.9.0",
     }),
     resources: Object.freeze(
       resources.map((resource) => Object.freeze(resource)),

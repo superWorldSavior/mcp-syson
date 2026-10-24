@@ -9,14 +9,13 @@ A focused [Model Context Protocol](https://modelcontextprotocol.io) provider for
 real SysON model through explicit modelling, navigation, diagram, requirement,
 constraint and value operations.
 
-![A recorded SysON requirements viewer showing the TPS03 StandBackrest authored limits](docs/images/mcp-syson-requirements-viewer.png)
+<img src="docs/images/mcp-syson-diagram-viewer.png" width="560" alt="A recorded SysON state machine drawn by the diagram viewer: a state definition with its actions, nested states, initial states and transitions with triggers and guards">
 
-_The TPS03 StandBackrest requirements capture fixture rendered by the
-provider-owned MCP App — a contract preview, not execution evidence. The image
-is rendered from the committed fixture
-(`docs/fixtures/requirements-session.json`) through the documentation harness
-(`deno task docs:viewer-screenshot`). The viewer remains read-only and preserves
-authored limits without inventing a satisfaction verdict._
+_The FlightModes state machine recorded from a local SysON project
+(`docs/fixtures/diagram-session.json`) and drawn by the provider-owned diagram
+viewer in SysON's own layout — a contract preview, not execution evidence. The
+image is rendered from the committed fixture through the documentation harness
+(`deno task docs:viewer-screenshot`)._
 
 ## Built for small, useful views
 
@@ -25,11 +24,24 @@ one bounded job—explore model elements, inspect a diagram, read query values,
 review requirement links, check validation state or confirm a value—so a host
 can compose them without embedding a second modelling application.
 
-The model explorer keeps a path through visited branches, including each level's
-filter and scroll position. Model and diagram viewers use the same selection
-gestures, with a basket scoped to each viewer root: click or Space toggles a
-selection; double-click or Enter inspects while preserving it. Diagrams also
-support an additive selection rectangle and separate Select/Pan modes. See
+The diagram viewer draws SysON's General, Interconnection, Action Flow and State
+Transition views itself: nested parts, actions and states, view frames, control
+nodes, ports, and SysON's own edge notation (dashed successions, item flows,
+compositions). It keeps SysON's layout or computes an automatic one, and shows
+only what SysON shows: hidden elements stay out.
+
+![A recorded SysON requirements viewer showing the TPS03 StandBackrest authored limits](docs/images/mcp-syson-requirements-viewer.png)
+
+_The TPS03 StandBackrest requirements capture fixture
+(`docs/fixtures/requirements-session.json`), rendered the same way. The viewer
+remains read-only and preserves authored limits without inventing a satisfaction
+verdict._
+
+The model explorer is a tree: branches load on demand and keep their filter and
+scroll position. Model and diagram viewers use the same selection gestures, with
+a basket scoped to each viewer root: click or Space toggles a selection;
+double-click or Enter inspects while preserving it. Diagrams also support an
+additive selection rectangle and separate Select/Pan modes. See
 [Browse model elements and diagram views](docs/how-to/browse-model-views.md).
 
 The same operations remain usable in clients without MCP App support. No tool
@@ -49,14 +61,14 @@ export SYSON_URL=http://localhost:8180
 Run the published package over HTTP:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server
+deno run -A jsr:@casys/mcp-syson@0.9.0/server
 ```
 
 The MCP endpoint is <http://127.0.0.1:3009/mcp>. For a client that launches one
 local process, use stdio instead:
 
 ```bash
-deno run -A jsr:@casys/mcp-syson@0.8.7/server --stdio
+deno run -A jsr:@casys/mcp-syson@0.9.0/server --stdio
 ```
 
 An existing SysON deployment works too; point `SYSON_URL` at its base URL. The
@@ -69,7 +81,9 @@ authentication and renderer configuration.
 
 - Create projects, documents, packages and explicit SysML v2 structures.
 - Browse and query model elements while preserving SysON identifiers.
-- Render diagrams locally by default, with an opt-in external renderer.
+- Draw SysON diagrams with their notation, in SysON's layout or an automatic
+  one; a local SVG (or an opt-in external renderer) serves clients without MCP
+  Apps.
 - Trace requirements and derive product structures from model evidence.
 - Evaluate unit-aware constraints and explore bounded what-if values.
 - Update model values and perform fail-closed destructive operations.
