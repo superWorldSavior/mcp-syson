@@ -54,8 +54,10 @@ function unwrapMutation<T extends object>(
 // WebSocket diagram snapshot
 // ============================================================================
 
+/** Children layout of a node style: compartments stack rows, free-form ones hold nested nodes. */
+const LAYOUT = "childrenLayoutStrategy { __typename }";
 const nodeFields = (depth: number): string =>
-  `id type targetObjectId insideLabel { text } outsideLabels { text } style { __typename ... on EllipseNodeStyle { background borderColor borderSize borderStyle } ... on RectangularNodeStyle { background borderColor borderRadius borderSize borderStyle } ... on ImageNodeStyle { imageURL borderColor borderRadius borderSize borderStyle } } defaultWidth defaultHeight ${
+  `id type targetObjectId state insideLabel { text } outsideLabels { text } style { __typename ... on EllipseNodeStyle { background borderColor borderSize borderStyle ${LAYOUT} } ... on RectangularNodeStyle { background borderColor borderRadius borderSize borderStyle ${LAYOUT} } ... on ImageNodeStyle { imageURL borderColor borderRadius borderSize borderStyle ${LAYOUT} } ... on IconLabelNodeStyle { background ${LAYOUT} } ... on SysMLViewFrameNodeStyle { background borderColor borderRadius borderSize borderStyle } } defaultWidth defaultHeight ${
     depth > 0
       ? `borderNodes { ${nodeFields(0)} } childNodes { ${
         nodeFields(depth - 1)
@@ -67,7 +69,7 @@ const DIAGRAM_SUBSCRIPTION =
  diagramEvent(input: $input) { __typename ... on DiagramRefreshedEventPayload {
  diagram { id targetObjectId metadata { label kind description { id label } }
  nodes { ${nodeFields(8)} }
- edges { id type targetObjectId sourceId targetId beginLabel { text } centerLabel { text } endLabel { text } }
+ edges { id type targetObjectId sourceId targetId state style { lineStyle sourceArrow targetArrow } beginLabel { text } centerLabel { text } endLabel { text } }
  layoutData { nodeLayoutData { id position { x y } size { width height } } edgeLayoutData { id bendingPoints { x y } } }
  } } } }`;
 
@@ -77,8 +79,11 @@ export interface DiagramNode {
   targetObjectId?: string;
   type?: string;
   parentId?: string;
+  /** `node`: a top-level node or one nested in a free-form compartment; `compartment`: a compartment or a row of a list. */
   kind?: "node" | "compartment" | "port";
   hasLayout?: boolean;
+  /** SysON draws the node faded (ViewModifier `Faded`). */
+  faded?: true;
   outsideLabels?: string[];
   style?: {
     kind: string;
@@ -88,6 +93,8 @@ export interface DiagramNode {
     borderSize?: number;
     borderStyle?: string;
     imageURL?: string;
+    /** `list`: children stack as rows; `free`: children are nested nodes. */
+    childrenLayout?: "list" | "free";
   };
   x: number;
   y: number;
@@ -104,7 +111,169 @@ export interface DiagramEdge {
   type?: string;
   beginLabel?: string;
   endLabel?: string;
+  /** SysON edge style: `lineStyle` Solid/Dash/Dot/Dash_Dot, arrows as SysON `ArrowStyle` names. */
+  style?: { lineStyle: string; sourceArrow: string; targetArrow: string };
+  faded?: true;
   routingPoints?: { x: number; y: number }[];
+}
+
+export interface DiagramData {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+  label: string;
+  childToParent: Map<string, string>;
+  targetObjectId?: string;
+  metadata?: Record<string, unknown>;
+  /** Elements SysON keeps on the diagram but hides; left out of `nodes`/`edges`. */
+  hidden: { nodes: number; edges: number };
+}
+
+type Raw = Record<string, unknown>;
+
+const CHILDREN_LAYOUT: Record<string, "list" | "free"> = {
+  ListLayoutStrategy: "list",
+  FreeFormLayoutStrategy: "free",
+};
+
+/**
+ * One `DiagramRefreshedEventPayload.diagram` as flat nodes and edges with
+ * absolute layout data. Hidden elements (and everything under a hidden
+ * node, and every edge touching one) are left out: SysON keeps them on the
+ * diagram, but nobody sees them there.
+ */
+export function snapshotFromDiagram(d: Raw): DiagramData {
+  const layoutData = (d.layoutData ?? {}) as {
+    nodeLayoutData?: {
+      id: string;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+    }[];
+    edgeLayoutData?: {
+      id: string;
+      bendingPoints?: { x: number; y: number }[];
+    }[];
+  };
+  const layoutMap = new Map(
+    (layoutData.nodeLayoutData ?? []).map((l) => [l.id, l]),
+  );
+  const bends = new Map(
+    (layoutData.edgeLayoutData ?? []).map((l) => [l.id, l.bendingPoints]),
+  );
+
+  const childToParent = new Map<string, string>();
+  const nodes: DiagramNode[] = [];
+  const kept = new Set<string>();
+  let hiddenNodes = 0;
+  const countAll = (items: Raw[]): number =>
+    items.reduce(
+      (sum, n) =>
+        sum + 1 + countAll((n.childNodes ?? []) as Raw[]) +
+        countAll((n.borderNodes ?? []) as Raw[]),
+      0,
+    );
+  const visit = (
+    items: Raw[],
+    parentId?: string,
+    kind: DiagramNode["kind"] = "node",
+  ) => {
+    for (const n of items) {
+      if (n.state === "Hidden") {
+        hiddenNodes += countAll([n]);
+        continue;
+      }
+      const id = n.id as string;
+      const layout = layoutMap.get(id);
+      if (parentId) childToParent.set(id, parentId);
+      const nativeStyle = n.style as Raw | undefined;
+      let style: DiagramNode["style"];
+      if (nativeStyle) {
+        const { __typename, childrenLayoutStrategy, ...rest } = nativeStyle;
+        const childrenLayout = CHILDREN_LAYOUT[
+          (childrenLayoutStrategy as Raw | undefined)?.__typename as string
+        ];
+        style = {
+          kind: __typename as string,
+          ...rest,
+          ...(childrenLayout && { childrenLayout }),
+        };
+      }
+      kept.add(id);
+      nodes.push({
+        id,
+        label: (n.insideLabel as { text?: string } | null)?.text ?? "",
+        targetObjectId: n.targetObjectId as string,
+        type: n.type as string,
+        parentId,
+        kind,
+        ...(n.state === "Faded" && { faded: true as const }),
+        outsideLabels: ((n.outsideLabels ?? []) as { text: string }[]).map(
+          (label) => label.text,
+        ),
+        style,
+        hasLayout: !!layout,
+        x: layout?.position.x ?? 0,
+        y: layout?.position.y ?? 0,
+        width: layout?.size.width ?? (n.defaultWidth as number) ??
+          (kind === "port" ? 16 : 180),
+        height: layout?.size.height ?? (n.defaultHeight as number) ??
+          (kind === "port" ? 16 : 72),
+      });
+      // Children of a free-form node (or of a view frame) are nodes of their
+      // own; children of a list node are its compartments and rows.
+      const holdsNodes = style?.childrenLayout === "free" ||
+        style?.kind === "SysMLViewFrameNodeStyle";
+      visit(
+        (n.childNodes ?? []) as Raw[],
+        id,
+        holdsNodes ? "node" : "compartment",
+      );
+      visit((n.borderNodes ?? []) as Raw[], id, "port");
+    }
+  };
+  visit((d.nodes ?? []) as Raw[]);
+
+  let hiddenEdges = 0;
+  const edges: DiagramEdge[] = [];
+  for (const e of (d.edges ?? []) as Raw[]) {
+    if (
+      e.state === "Hidden" || !kept.has(e.sourceId as string) ||
+      !kept.has(e.targetId as string)
+    ) {
+      hiddenEdges++;
+      continue;
+    }
+    const style = e.style as DiagramEdge["style"] | undefined;
+    edges.push({
+      id: e.id as string,
+      targetObjectId: e.targetObjectId as string,
+      type: e.type as string,
+      beginLabel: (e.beginLabel as { text: string } | null)?.text,
+      endLabel: (e.endLabel as { text: string } | null)?.text,
+      ...(style && {
+        style: {
+          lineStyle: style.lineStyle,
+          sourceArrow: style.sourceArrow,
+          targetArrow: style.targetArrow,
+        },
+      }),
+      ...(e.state === "Faded" && { faded: true as const }),
+      routingPoints: bends.get(e.id as string),
+      sourceId: e.sourceId as string,
+      targetId: e.targetId as string,
+      label: (e.centerLabel as { text: string } | null)?.text,
+    });
+  }
+
+  const metadata = d.metadata as Record<string, unknown> | undefined;
+  return {
+    nodes,
+    edges,
+    label: typeof metadata?.label === "string" ? metadata.label : "",
+    childToParent,
+    targetObjectId: d.targetObjectId as string | undefined,
+    metadata,
+    hidden: { nodes: hiddenNodes, edges: hiddenEdges },
+  };
 }
 
 /**
@@ -116,16 +285,7 @@ function fetchDiagramData(
   ecId: string,
   diagramId: string,
   timeoutMs = 10_000,
-): Promise<
-  {
-    nodes: DiagramNode[];
-    edges: DiagramEdge[];
-    label: string;
-    childToParent: Map<string, string>;
-    targetObjectId?: string;
-    metadata?: Record<string, unknown>;
-  }
-> {
+): Promise<DiagramData> {
   const wsUrl = baseUrl.replace(/^http/, "ws") + "/subscriptions";
 
   return new Promise((resolve, reject) => {
@@ -182,105 +342,7 @@ function fetchDiagramData(
           ws.send(JSON.stringify({ id: "snap", type: "stop" }));
           ws.close();
 
-          const d = payload.diagram;
-          const layoutMap = new Map<
-            string,
-            { x: number; y: number; w: number; h: number }
-          >();
-          for (const l of d.layoutData.nodeLayoutData) {
-            layoutMap.set(l.id, {
-              x: l.position.x,
-              y: l.position.y,
-              w: l.size.width,
-              h: l.size.height,
-            });
-          }
-
-          const childToParent = new Map<string, string>();
-          const nodes: DiagramNode[] = [];
-          const visit = (
-            items: Array<Record<string, unknown>>,
-            parentId?: string,
-            kind: DiagramNode["kind"] = "node",
-          ) => {
-            for (const n of items) {
-              const id = n.id as string;
-              const layout = layoutMap.get(id);
-              if (parentId) childToParent.set(id, parentId);
-              const nativeStyle = n.style as
-                | Record<string, unknown>
-                | undefined;
-              const style = nativeStyle
-                ? {
-                  kind: nativeStyle.__typename as string,
-                  ...Object.fromEntries(
-                    Object.entries(nativeStyle).filter(([key]) =>
-                      key !== "__typename"
-                    ),
-                  ),
-                }
-                : undefined;
-              const outsideLabels =
-                ((n.outsideLabels ?? []) as Array<{ text: string }>).map(
-                  (label) => label.text,
-                );
-              nodes.push({
-                id,
-                label: (n.insideLabel as { text?: string } | null)?.text ?? "",
-                targetObjectId: n.targetObjectId as string,
-                type: n.type as string,
-                parentId,
-                kind,
-                outsideLabels,
-                style,
-                hasLayout: !!layout,
-                x: layout?.x ?? 0,
-                y: layout?.y ?? 0,
-                width: layout?.w ?? (n.defaultWidth as number) ??
-                  (kind === "port" ? 16 : 180),
-                height: layout?.h ?? (n.defaultHeight as number) ??
-                  (kind === "port" ? 16 : 72),
-              });
-              visit(
-                (n.childNodes ?? []) as Array<Record<string, unknown>>,
-                id,
-                "compartment",
-              );
-              visit(
-                (n.borderNodes ?? []) as Array<Record<string, unknown>>,
-                id,
-                "port",
-              );
-            }
-          };
-          visit(d.nodes);
-
-          const edges: DiagramEdge[] = d.edges.map((
-            e: Record<string, unknown>,
-          ) => ({
-            id: e.id as string,
-            targetObjectId: e.targetObjectId as string,
-            type: e.type as string,
-            beginLabel: (e.beginLabel as { text: string } | null)?.text,
-            endLabel: (e.endLabel as { text: string } | null)?.text,
-            routingPoints: d.layoutData.edgeLayoutData?.find((
-              l: { id: string },
-            ) => l.id === e.id)?.bendingPoints,
-            sourceId: e.sourceId as string,
-            targetId: e.targetId as string,
-            label: (e.centerLabel as { text: string } | null)?.text,
-          }));
-
-          resolve({
-            nodes,
-            edges,
-            label: typeof d.metadata?.label === "string"
-              ? d.metadata.label
-              : "",
-            childToParent,
-            targetObjectId: d.targetObjectId,
-            metadata: d.metadata,
-          });
+          resolve(snapshotFromDiagram(payload.diagram));
         }
       }
 
@@ -845,7 +907,10 @@ export const diagramTools: SysonTool[] = [
       "Render a diagram as SVG. Shows parts, interfaces, and connections " +
       "with a dark-themed layout. Rendering is local by default. An operator may " +
       "explicitly configure SYSON_KROKI_URL for an external renderer; the result " +
-      "then identifies that external path. Call after syson_diagram_arrange for best results.",
+      "then identifies that external path. Call after syson_diagram_arrange for best results. " +
+      "Structured `nodes` and `edges` hold only what SysON shows: hidden elements are left out " +
+      "and counted in `hiddenNodeCount` / `hiddenEdgeCount`. Nodes nested in a free-form " +
+      "compartment have kind `node`; edges carry SysON's `style` (line and arrows).",
     category: "diagram",
     inputSchema: {
       type: "object",
@@ -874,12 +939,19 @@ export const diagramTools: SysonTool[] = [
       const ecId = editing_context_id as string;
       const diagId = diagram_id as string;
 
-      const { nodes, edges, label, childToParent, targetObjectId, metadata } =
-        await fetchDiagramData(
-          baseUrl,
-          ecId,
-          diagId,
-        );
+      const {
+        nodes,
+        edges,
+        label,
+        childToParent,
+        targetObjectId,
+        metadata,
+        hidden,
+      } = await fetchDiagramData(
+        baseUrl,
+        ecId,
+        diagId,
+      );
       const rendered = await renderDiagramSvg(
         nodes,
         edges,
@@ -895,6 +967,10 @@ export const diagramTools: SysonTool[] = [
         diagramLabel: label,
         nodeCount: nodes.length,
         edgeCount: edges.length,
+        ...((hidden.nodes || hidden.edges) && {
+          hiddenNodeCount: hidden.nodes,
+          hiddenEdgeCount: hidden.edges,
+        }),
         nodes,
         edges,
         svg: rendered.svg,

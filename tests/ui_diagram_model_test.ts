@@ -1,5 +1,6 @@
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import {
+  diagramHeading,
   fitDiagram,
   openingFocus,
   semanticDiagramMember,
@@ -501,4 +502,46 @@ Deno.test("opening focus follows reading order, not document order", () => {
     { x: 40, y: 10, width: 100, height: 40 },
   );
   assertEquals(openingFocus([{ kind: "edge" }]), undefined);
+  // A container spanning the diagram: its header corner, not its middle.
+  assertEquals(
+    openingFocus([{
+      kind: "node",
+      rect: { x: 12, y: 12, width: 700, height: 1150 },
+    }, { kind: "node", rect: { x: 400, y: 200, width: 194, height: 60 } }]),
+    { x: 12, y: 12, width: 360, height: 120 },
+  );
+});
+
+Deno.test("the diagram's name is the title, its representation type the eyebrow", () => {
+  assertEquals(
+    diagramHeading({
+      representation: "General View",
+      name: "FlightModes  state transition",
+      fallback: "Diagram",
+    }),
+    { eyebrow: "General View", title: "FlightModes state transition" },
+  );
+  // The element the diagram shows wins over the view's generated name.
+  assertEquals(
+    diagramHeading({
+      representation: "General View",
+      name: "view1",
+      target: "Batmobile",
+      fallback: "Diagram",
+    }),
+    { eyebrow: "General View", title: "Batmobile" },
+  );
+  assertEquals(
+    diagramHeading({ representation: "General View", fallback: "Diagram" }),
+    { title: "General View" },
+  );
+  assertEquals(
+    diagramHeading({
+      name: "General View",
+      representation: "General View",
+      fallback: "Diagram",
+    }),
+    { title: "General View" },
+  );
+  assertEquals(diagramHeading({ fallback: "Diagram" }), { title: "Diagram" });
 });

@@ -150,9 +150,19 @@ export function isDiagramSnapshot(
       "svg",
       "renderer",
     ],
-    ["rendererWarning", "editingContextId", "targetObjectId", "metadata"],
+    [
+      "rendererWarning",
+      "editingContextId",
+      "targetObjectId",
+      "metadata",
+      "hiddenNodeCount",
+      "hiddenEdgeCount",
+    ],
   ) &&
     optionalString(value, "editingContextId", true) &&
+    ["hiddenNodeCount", "hiddenEdgeCount"].every((key) =>
+      value[key] === undefined || isNonNegativeInteger(value[key])
+    ) &&
     optionalString(value, "targetObjectId") &&
     (value.metadata === undefined ||
       (isExactRecord(value.metadata, ["label", "kind", "description"]) &&
@@ -681,7 +691,10 @@ function isNativeNodeStyle(value: unknown): boolean {
     "borderSize",
     "borderStyle",
     "imageURL",
+    "childrenLayout",
   ]) && typeof value.kind === "string" &&
+    (value.childrenLayout === undefined ||
+      value.childrenLayout === "list" || value.childrenLayout === "free") &&
     [
       "ImageNodeStyle",
       "IconLabelNodeStyle",
@@ -707,6 +720,7 @@ function isDiagramNode(value: unknown): boolean {
     "parentId",
     "kind",
     "hasLayout",
+    "faded",
     "outsideLabels",
     "style",
     "x",
@@ -714,6 +728,7 @@ function isDiagramNode(value: unknown): boolean {
     "width",
     "height",
   ]) && isNonEmptyString(value.id) && typeof value.label === "string" &&
+    (value.faded === undefined || value.faded === true) &&
     ["targetObjectId", "type", "parentId"].every((key) =>
       optionalString(value, key)
     ) &&
@@ -739,11 +754,23 @@ function isDiagramEdge(value: unknown): boolean {
     "type",
     "beginLabel",
     "endLabel",
+    "style",
+    "faded",
     "routingPoints",
   ]) &&
     ["id", "sourceId", "targetId"].every((key) =>
       isNonEmptyString(value[key])
     ) &&
+    (value.faded === undefined || value.faded === true) &&
+    (value.style === undefined ||
+      (isExactRecord(value.style, [
+        "lineStyle",
+        "sourceArrow",
+        "targetArrow",
+      ]) &&
+        ["lineStyle", "sourceArrow", "targetArrow"].every((key) =>
+          typeof (value.style as Record<string, unknown>)[key] === "string"
+        ))) &&
     ["label", "targetObjectId", "type", "beginLabel", "endLabel"].every((key) =>
       optionalString(value, key)
     ) &&

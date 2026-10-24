@@ -217,7 +217,9 @@ function followAxis(
 /**
  * Reading-order focus for the opening view: the top-most node, then the
  * left-most among nodes on that row (within `rowTolerance`). Document order
- * says nothing about position: SysON may list a bottom block first.
+ * says nothing about position: SysON may list a bottom block first. Only
+ * the node's top-left corner counts, so a container spanning the whole
+ * diagram opens on its header, not on its middle.
  */
 export function openingFocus(
   entries: readonly { kind?: string; rect?: DiagramRect }[],
@@ -234,8 +236,15 @@ export function openingFocus(
       best = rect;
     }
   }
-  return best;
+  return best && {
+    ...best,
+    width: Math.min(best.width, OPENING_CORNER.width),
+    height: Math.min(best.height, OPENING_CORNER.height),
+  };
 }
+
+/** The part of the focus node the opening view frames. */
+export const OPENING_CORNER = { width: 360, height: 120 } as const;
 
 /**
  * Opening view: the whole diagram when "fit" stays legible, otherwise the
@@ -400,23 +409,28 @@ export function plainElementName(label: string | undefined): string {
 }
 
 /**
- * Viewer title (syson-ux-design.md §1.3): the representation and the element
- * it shows, "General View — Batmobile". The view's own name stands in for an
- * unknown target, and is shown alone only when nothing better exists.
+ * Viewer heading (syson-ux-design.md §1.3): the element the diagram shows
+ * as the title, else the view's own name; the representation type ("General
+ * View") as the eyebrow above it. The type is the title only when nothing
+ * names the diagram.
  */
-export function diagramTitle(parts: {
+export function diagramHeading(parts: {
   readonly representation?: string;
   readonly name?: string;
   readonly target?: string;
   readonly fallback: string;
-}): string {
+}): { readonly eyebrow?: string; readonly title: string } {
   const clean = (value?: string) => value?.replace(/\s+/g, " ").trim() || "";
   const representation = clean(parts.representation);
-  const name = clean(parts.name);
-  const target = clean(parts.target);
-  const head = representation || name || clean(parts.fallback);
-  const subject = target || name;
-  return subject && subject !== head ? `${head} — ${subject}` : head;
+  const subject = clean(parts.target) || clean(parts.name);
+  if (subject) {
+    return {
+      ...(representation && representation !== subject &&
+        { eyebrow: representation }),
+      title: subject,
+    };
+  }
+  return { title: representation || clean(parts.fallback) };
 }
 
 /** Once a gesture crossed the drag threshold, returning to its origin is still a drag. */

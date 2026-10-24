@@ -10,11 +10,14 @@
 import type { DiagramPoint } from "./diagram-model.ts";
 import {
   BLOCK,
+  blockContent,
+  compartmentSlots,
   connectedComponents,
   type DiagramModel,
   type DiagramScene,
   FONTS,
-  layoutBlockContent,
+  isContainer,
+  type ModelBlock,
   normalizeScene,
   pointAlong,
   routeSceneEdges,
@@ -101,6 +104,18 @@ export const ELK_BLOCK_OPTIONS: Readonly<Record<string, string>> = {
   "elk.portLabels.placement": "OUTSIDE",
 };
 
+/**
+ * A container grows around its nested blocks, never below its own content.
+ * Its ports stay free: fixed sides on a compound node break the edges that
+ * cross its border (ELK returns diagonal sections or throws).
+ */
+export const ELK_CONTAINER_OPTIONS: Readonly<Record<string, string>> = {
+  "elk.portConstraints": "FREE",
+  "elk.nodeSize.constraints": "MINIMUM_SIZE",
+  "elk.spacing.nodeNode": "32",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "48",
+};
+
 const ELK_SIDES = {
   west: "WEST",
   east: "EAST",
@@ -110,32 +125,105 @@ const ELK_SIDES = {
 
 export { connectedComponents };
 
+/** What a container keeps around its nested blocks: header, list sections. */
+export function containerPadding(
+  block: ModelBlock,
+  width: number,
+  measure: TextMeasure,
+): { top: number; bottom: number } {
+  const stacked = compartmentSlots(block, width, measure, () => 0);
+  const regions = stacked.slots.filter((slot) => slot.region);
+  if (block.shape === "frame" || !regions.length) {
+    return {
+      top: stacked.headerHeight + BLOCK.regionPad,
+      bottom: BLOCK.regionPad,
+    };
+  }
+  const first = regions[0], last = regions.at(-1)!;
+  const titled = block.regions.find((region) => region.id === first.id)?.title;
+  return {
+    top: first.y + (titled ? BLOCK.regionTitle : BLOCK.regionPad),
+    bottom: stacked.height - (last.y + last.height) + BLOCK.regionPad,
+  };
+}
+
 /**
  * The ELK input: block sizes from our own content measurement, ports on
  * fixed sides with their outside labels, and one compound node per
- * connected component. Self-loops stay out (routed locally).
+ * connected component of top-level blocks. A container is a compound node
+ * whose padding keeps its header and list sections clear; each edge lives
+ * in the closest node holding both its ends. Self-loops and edges between a
+ * block and a block it contains stay out (routed locally).
  */
 export function elkGraph(
   model: DiagramModel,
   sizes: ReadonlyMap<string, { width: number; height: number }>,
   measure: TextMeasure,
 ): ElkNode {
-  const linked = model.edges.filter((edge) =>
-    edge.sourceBlock !== edge.targetBlock
-  );
-  const components = connectedComponents(
-    model.blocks.map((block) => block.id),
-    linked.map((edge) => [edge.sourceBlock, edge.targetBlock] as const),
-  );
   const byId = new Map(model.blocks.map((block) => [block.id, block]));
+  const ancestors = (id: string) => {
+    const chain: string[] = [];
+    for (
+      let block = byId.get(id);
+      block?.parent && chain.length < 64;
+      block = byId.get(block.parent)
+    ) chain.push(block.parent);
+    return chain;
+  };
+  const topOf = (id: string) => ancestors(id).at(-1) ?? id;
+  const linked = model.edges.filter((edge) =>
+    edge.sourceBlock !== edge.targetBlock &&
+    !ancestors(edge.sourceBlock).includes(edge.targetBlock) &&
+    !ancestors(edge.targetBlock).includes(edge.sourceBlock)
+  );
+  const roots = model.blocks.filter((block) => !block.parent);
+  const components = connectedComponents(
+    roots.map((block) => block.id),
+    linked.map((edge) =>
+      [topOf(edge.sourceBlock), topOf(edge.targetBlock)] as const
+    ),
+  );
   const componentOf = new Map<string, number>();
   components.forEach((component, index) => {
     for (const id of component) componentOf.set(id, index);
   });
+  /** The closest container holding both ends, else the component. */
+  const homeOf = (edge: (typeof linked)[number]) => {
+    const up = new Set(ancestors(edge.sourceBlock));
+    return ancestors(edge.targetBlock).find((id) => up.has(id));
+  };
+  const edgesIn = new Map<string, typeof linked>();
+  for (const edge of linked) {
+    const key = homeOf(edge) ??
+      `syson-component-${componentOf.get(topOf(edge.sourceBlock))}`;
+    const list = edgesIn.get(key) ?? [];
+    list.push(edge);
+    edgesIn.set(key, list);
+  }
+  const elkEdges = (key: string): ElkEdge[] =>
+    (edgesIn.get(key) ?? []).map((edge) => ({
+      id: edge.id,
+      sources: [edge.sourcePort ?? edge.sourceBlock],
+      targets: [edge.targetPort ?? edge.targetBlock],
+      labels: edge.label
+        ? [{
+          text: edge.label,
+          width: Math.ceil(measure(edge.label, FONTS.edgeLabel) + 12),
+          height: 18,
+        }]
+        : [],
+    }));
+  const children = new Map<string, ModelBlock[]>();
+  for (const block of model.blocks) {
+    if (!block.parent) continue;
+    const list = children.get(block.parent) ?? [];
+    list.push(block);
+    children.set(block.parent, list);
+  }
   const node = (id: string): ElkNode => {
     const block = byId.get(id)!;
     const size = sizes.get(id) ?? { width: BLOCK.minWidth, height: 60 };
-    return {
+    const elk: ElkNode = {
       id,
       width: size.width,
       height: size.height,
@@ -156,6 +244,20 @@ export function elkGraph(
           : [],
       })),
     };
+    const nested = children.get(id);
+    if (isContainer(block) && nested?.length) {
+      const padding = containerPadding(block, size.width, measure);
+      elk.layoutOptions = {
+        ...elk.layoutOptions,
+        ...ELK_CONTAINER_OPTIONS,
+        "elk.padding":
+          `[top=${padding.top},left=${BLOCK.regionPad},bottom=${padding.bottom},right=${BLOCK.regionPad}]`,
+        "elk.nodeSize.minimum": `(${size.width}, ${size.height})`,
+      };
+      elk.children = nested.map((child) => node(child.id));
+      elk.edges = elkEdges(id);
+    }
+    return elk;
   };
   return {
     id: "syson-diagram",
@@ -164,22 +266,18 @@ export function elkGraph(
       id: `syson-component-${index}`,
       layoutOptions: { ...ELK_COMPONENT_OPTIONS },
       children: component.map(node),
-      edges: linked.filter((edge) =>
-        componentOf.get(edge.sourceBlock) === index
-      ).map((edge) => ({
-        id: edge.id,
-        sources: [edge.sourcePort ?? edge.sourceBlock],
-        targets: [edge.targetPort ?? edge.targetBlock],
-        labels: edge.label
-          ? [{
-            text: edge.label,
-            width: Math.ceil(measure(edge.label, FONTS.edgeLabel) + 12),
-            height: 18,
-          }]
-          : [],
-      })),
+      edges: elkEdges(`syson-component-${index}`),
     })),
   };
+}
+
+/** Every segment horizontal or vertical (within half a pixel). */
+export function isOrthogonal(points: readonly DiagramPoint[]): boolean {
+  return points.length >= 2 &&
+    points.every((point, index) =>
+      index === 0 || Math.abs(point.x - points[index - 1].x) < 0.6 ||
+      Math.abs(point.y - points[index - 1].y) < 0.6
+    );
 }
 
 function collect(
@@ -229,6 +327,7 @@ export function sceneFromElk(
         targetObjectId: port.targetObjectId,
         label: port.label,
         side: port.side,
+        direction: port.direction,
         rect: placed
           ? {
             x: answer.x!,
@@ -246,10 +345,24 @@ export function sceneFromElk(
           },
       };
     });
+    let slots;
+    if (isContainer(block)) {
+      // The region takes what ELK gave beyond the padding.
+      const stacked = compartmentSlots(block, rect.width, measure, () => 0);
+      const regionIndex = stacked.slots.findIndex((slot) => slot.region);
+      const extra = rect.height - stacked.height;
+      slots = stacked.slots.map((slot, index) =>
+        regionIndex < 0 || index < regionIndex
+          ? slot
+          : index === regionIndex
+          ? { ...slot, height: slot.height + extra }
+          : { ...slot, y: slot.y + extra }
+      );
+    }
     return {
       block,
       rect,
-      content: layoutBlockContent(block, rect.width, undefined, measure),
+      content: blockContent(block, rect, false, measure, slots),
       ports,
     };
   });
@@ -257,15 +370,15 @@ export function sceneFromElk(
   const local = [];
   for (const edge of model.edges) {
     const section = edges.get(edge.id)?.sections?.[0];
-    if (!section) {
+    const points = section
+      ? [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
+        .map((point) => ({ x: point.x, y: point.y }))
+      : [];
+    // A missing or diagonal section is routed here instead.
+    if (!section || !isOrthogonal(points)) {
       local.push(edge);
       continue;
     }
-    const points = [
-      section.startPoint,
-      ...(section.bendPoints ?? []),
-      section.endPoint,
-    ].map((point) => ({ x: point.x, y: point.y }));
     const labels = (edges.get(edge.id)?.labels ?? []).filter((label) =>
       Number.isFinite(label.x) && Number.isFinite(label.y)
     ).map((label) => ({

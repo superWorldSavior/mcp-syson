@@ -17,6 +17,8 @@ export interface SnapshotNodeStyle {
   readonly kind?: string;
   readonly imageURL?: string;
   readonly background?: string;
+  /** `list`: children stack as rows; `free`: children are nested nodes. */
+  readonly childrenLayout?: "list" | "free";
 }
 export interface SnapshotNode {
   readonly id: string;
@@ -26,12 +28,19 @@ export interface SnapshotNode {
   readonly kind?: string;
   readonly parentId?: string;
   readonly hasLayout?: boolean;
+  readonly faded?: boolean;
   readonly outsideLabels?: readonly string[];
   readonly style?: SnapshotNodeStyle;
   readonly x?: number;
   readonly y?: number;
   readonly width?: number;
   readonly height?: number;
+}
+/** SysON edge style: `lineStyle` and `ArrowStyle` names as SysON gives them. */
+export interface SnapshotEdgeStyle {
+  readonly lineStyle?: string;
+  readonly sourceArrow?: string;
+  readonly targetArrow?: string;
 }
 export interface SnapshotEdge {
   readonly id: string;
@@ -42,6 +51,8 @@ export interface SnapshotEdge {
   readonly type?: string;
   readonly beginLabel?: string;
   readonly endLabel?: string;
+  readonly style?: SnapshotEdgeStyle;
+  readonly faded?: boolean;
   readonly routingPoints?: readonly DiagramPoint[];
 }
 
@@ -51,14 +62,22 @@ const KNOWN_STYLES = new Set([
   "EllipseNodeStyle",
   "ImageNodeStyle",
   "IconLabelNodeStyle",
+  "SysMLViewFrameNodeStyle",
 ]);
+
+/** A view frame, or a node whose children SysON lays out freely: they are nodes. */
+export function holdsNodes(node: SnapshotNode | undefined): boolean {
+  return node?.style?.childrenLayout === "free" ||
+    node?.style?.kind === "SysMLViewFrameNodeStyle";
+}
 
 /**
  * The viewer draws the diagram itself when the snapshot carries structured
  * nodes it understands. Recorded sessions without nodes, a native style this
- * renderer does not know, or connections drawn inside one block (nested
- * parts wired together, which blocks with rows cannot show) keep the
- * sanitized server SVG.
+ * renderer does not know, or an edge between two rows of one block (which a
+ * block with rows cannot show) keep the sanitized server SVG. Nodes nested
+ * in a free-form compartment are blocks of their own, so edges between them
+ * are drawn.
  */
 export function clientRenderable(
   snapshot: { readonly nodes?: unknown; readonly edges?: unknown },
@@ -76,18 +95,20 @@ export function clientRenderable(
     }
     byId.set(node.id, node);
   }
-  const root = (id: string | undefined) => {
+  /** The block a node is drawn in: itself when it is a block. */
+  const blockOf = (id: string | undefined) => {
     let node = id ? byId.get(id) : undefined;
-    for (let depth = 0; node?.parentId && byId.has(node.parentId); depth++) {
-      if (depth > 64) return undefined;
-      node = byId.get(node.parentId);
+    for (let depth = 0; node; depth++) {
+      const parent = node.parentId ? byId.get(node.parentId) : undefined;
+      if (!parent || holdsNodes(parent) || depth > 64) return node.id;
+      node = parent;
     }
-    return node?.id;
+    return undefined;
   };
   for (const edge of (snapshot.edges ?? []) as SnapshotEdge[]) {
     if (!edge || edge.sourceId === edge.targetId) continue;
-    const source = root(edge.sourceId);
-    if (source && source === root(edge.targetId)) return false;
+    const source = blockOf(edge.sourceId);
+    if (source && source === blockOf(edge.targetId)) return false;
   }
   return (nodes as SnapshotNode[]).some((node) =>
     !node.parentId || !byId.has(node.parentId)
@@ -183,6 +204,95 @@ export function edgeMarker(
   return "none";
 }
 
+export type EdgeLine = "solid" | "dash" | "dot" | "dashDot";
+/** What one end of an edge carries (SysON `ArrowStyle`, simplified). */
+export type EdgeEnd =
+  | "none"
+  | "arrow"
+  | "triangle"
+  | "filledTriangle"
+  | "diamond"
+  | "filledDiamond"
+  | "circle"
+  | "filledCircle"
+  | "crossedCircle"
+  | "triangleBar"
+  | "triangleDots"
+  | "triangle4Dots";
+export interface EdgeTip {
+  readonly shape: EdgeEnd;
+  /** Points away from the node it touches (SysON `Output…` arrows). */
+  readonly outward: boolean;
+}
+export interface EdgeDecoration {
+  readonly line: EdgeLine;
+  readonly source: EdgeTip;
+  readonly target: EdgeTip;
+}
+
+const ARROWS: Record<string, readonly [EdgeEnd, boolean]> = {
+  None: ["none", false],
+  InputArrow: ["arrow", false],
+  OutputArrow: ["arrow", true],
+  InputClosedArrow: ["triangle", false],
+  OutputClosedArrow: ["triangle", true],
+  InputFillClosedArrow: ["filledTriangle", false],
+  OutputFillClosedArrow: ["filledTriangle", true],
+  Diamond: ["diamond", false],
+  FillDiamond: ["filledDiamond", false],
+  InputArrowWithDiamond: ["diamond", false],
+  InputArrowWithFillDiamond: ["filledDiamond", false],
+  Circle: ["circle", false],
+  FillCircle: ["filledCircle", false],
+  CrossedCircle: ["crossedCircle", false],
+  ClosedArrowWithVerticalBar: ["triangleBar", false],
+  ClosedArrowWithDots: ["triangleDots", false],
+  ClosedArrowWith4Dots: ["triangle4Dots", false],
+};
+const LINES: Record<string, EdgeLine> = {
+  Solid: "solid",
+  Dash: "dash",
+  Dot: "dot",
+  Dash_Dot: "dashDot",
+};
+const NO_TIP: EdgeTip = { shape: "none", outward: false };
+const tip = (shape: EdgeEnd): EdgeTip => ({ shape, outward: false });
+
+/**
+ * SysON's own edge style when the snapshot carries it (exact notation:
+ * dashed successions, filled flow heads…); otherwise the marker read from
+ * the type. An arrow name this viewer does not know draws nothing.
+ */
+export function edgeDecoration(
+  edge: { readonly style?: SnapshotEdgeStyle },
+  marker: EdgeMarker,
+): EdgeDecoration {
+  const style = edge.style;
+  if (style && (style.lineStyle || style.sourceArrow || style.targetArrow)) {
+    const end = (name?: string): EdgeTip => {
+      const known = name ? ARROWS[name] : undefined;
+      return known ? { shape: known[0], outward: known[1] } : NO_TIP;
+    };
+    return {
+      line: LINES[style.lineStyle ?? ""] ?? "solid",
+      source: end(style.sourceArrow),
+      target: end(style.targetArrow),
+    };
+  }
+  switch (marker) {
+    case "specialization":
+      return { line: "solid", source: NO_TIP, target: tip("triangle") };
+    case "dependency":
+      return { line: "dash", source: NO_TIP, target: tip("arrow") };
+    case "composition":
+      return { line: "solid", source: tip("filledDiamond"), target: NO_TIP };
+    case "flow":
+      return { line: "solid", source: NO_TIP, target: tip("filledTriangle") };
+    default:
+      return { line: "solid", source: NO_TIP, target: NO_TIP };
+  }
+}
+
 // ── Labels and kinds ────────────────────────────────────────────────────────
 
 export interface ParsedLabel {
@@ -272,7 +382,13 @@ export function rowText(label: string): string {
 // ── Model ───────────────────────────────────────────────────────────────────
 
 export type PortSide = "west" | "east" | "north" | "south";
-export type BlockShape = "card" | "start" | "done" | "decision" | "bar";
+export type BlockShape =
+  | "card"
+  | "frame"
+  | "start"
+  | "done"
+  | "decision"
+  | "bar";
 
 export interface ModelRow {
   readonly id: string;
@@ -284,12 +400,26 @@ export interface ModelSection {
   readonly id: string;
   readonly title: string;
   readonly rows: readonly ModelRow[];
+  /** Position among the block's compartments (sections and regions). */
+  readonly order: number;
+  /** Authored geometry, absolute diagram coordinates. */
+  readonly authored?: DiagramRect;
+}
+/** A free-form compartment: the nested blocks SysON lays out inside it. */
+export interface ModelRegion {
+  readonly id: string;
+  readonly title: string;
+  readonly order: number;
+  readonly authored?: DiagramRect;
+  readonly children: readonly string[];
 }
 export interface ModelPort {
   readonly id: string;
   readonly targetObjectId?: string;
   readonly label: string;
   readonly side: PortSide;
+  /** Parameter direction, from SysON's in/out feature images. */
+  readonly direction?: "in" | "out";
   /** Authored geometry, absolute diagram coordinates. */
   readonly authored?: DiagramRect;
 }
@@ -306,8 +436,16 @@ export interface ModelBlock {
   readonly definition: boolean;
   readonly shape: BlockShape;
   readonly sections: readonly ModelSection[];
+  /** Free-form compartments; a block with regions is a container. */
+  readonly regions: readonly ModelRegion[];
   readonly ports: readonly ModelPort[];
   readonly rowCount: number;
+  /** Containing block, for blocks nested in a region. */
+  readonly parent?: string;
+  readonly depth: number;
+  /** Name drawn under a control node (fork, join, decision). */
+  readonly caption?: string;
+  readonly faded?: boolean;
   /** Authored geometry, absolute diagram coordinates. */
   readonly authored?: DiagramRect;
 }
@@ -325,18 +463,28 @@ export interface ModelEdge {
   readonly beginLabel?: string;
   readonly endLabel?: string;
   readonly marker: EdgeMarker;
+  readonly decoration: EdgeDecoration;
+  readonly faded?: boolean;
   readonly routing?: readonly DiagramPoint[];
 }
 export interface DiagramModel {
+  /** Parents always come before the blocks nested in them. */
   readonly blocks: readonly ModelBlock[];
   readonly edges: readonly ModelEdge[];
 }
+
+/** A block with free-form compartments draws its nested blocks itself. */
+export const isContainer = (block: ModelBlock) =>
+  block.regions.length > 0 || block.shape === "frame";
 
 const finite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const semanticId = (value?: string) => value?.trim() ? value : undefined;
 
+const BLACK = new Set(["black", "#000", "#000000"]);
+
 function controlShape(node: SnapshotNode): BlockShape {
+  if (node.style?.kind === "SysMLViewFrameNodeStyle") return "frame";
   const image = node.style?.kind === "ImageNodeStyle"
     ? /(?:^|\/)images\/(decision|merge|start|done)_action\.svg$/.exec(
       node.style.imageURL ?? "",
@@ -345,20 +493,29 @@ function controlShape(node: SnapshotNode): BlockShape {
   if (image === "decision" || image === "merge") return "decision";
   if (image === "start") return "start";
   if (image === "done") return "done";
-  const background = node.style?.background?.toLowerCase();
+  // Fork and join bars: black, no inside label (the name sits outside).
   if (
-    !node.label?.trim() && !node.outsideLabels?.some((label) => label.trim()) &&
-    (background === "black" || background === "#000" ||
-      background === "#000000")
+    !node.label?.trim() &&
+    BLACK.has(node.style?.background?.toLowerCase() ?? "")
   ) return node.style?.kind === "EllipseNodeStyle" ? "start" : "bar";
   return "card";
 }
 
+function portDirection(node: SnapshotNode): ModelPort["direction"] {
+  if (node.style?.kind !== "ImageNodeStyle") return undefined;
+  const match = /(?:^|\/)feature_(in|out)\.svg$/.exec(
+    node.style.imageURL ?? "",
+  );
+  return match?.[1] as ModelPort["direction"];
+}
+
 /**
- * Structure the snapshot: top-level nodes become blocks; their decorative
- * compartments (same semantic target as the block) become titled sections
- * whose children are rows; border nodes become ports. Every descendant maps
- * to its block so edges always find an endpoint that is drawn.
+ * Structure the snapshot into blocks. A block's compartments (decorative
+ * children with its own semantic target) become titled sections of rows,
+ * or regions when SysON lays their children out freely: those children are
+ * blocks of their own, nested in the region. A view frame holds its nodes
+ * the same way. Border nodes become ports. Every descendant maps to the
+ * block that draws it, so edges always find a drawn endpoint.
  */
 export function buildDiagramModel(
   nodes: readonly SnapshotNode[],
@@ -423,100 +580,160 @@ export function buildDiagramModel(
   };
 
   const blocks: ModelBlock[] = [];
-  for (const root of roots) {
-    claim(root, root.id);
-    const parsed = parseNodeLabel(root.label, root.outsideLabels);
-    const { kind, qualifiers } = blockKind(parsed.stereotypes, root.style);
+  const placed = new Set<string>();
+  const addBlock = (node: SnapshotNode, parent?: string, depth = 0) => {
+    if (placed.has(node.id) || depth > 32) return;
+    placed.add(node.id);
+    claim(node, node.id);
+    const parsed = parseNodeLabel(node.label, node.outsideLabels);
+    const shape = controlShape(node);
+    const control = shape !== "card" && shape !== "frame";
+    const { kind, qualifiers } = control
+      ? { kind: undefined, qualifiers: [] }
+      : blockKind(parsed.stereotypes, node.style);
     const info = kind ? kindInfo(kind) : undefined;
-    const rootRect = authoredRect(root);
+    const blockRect = authoredRect(node);
     const sections: ModelSection[] = [];
+    const regions: (ModelRegion & { children: string[] })[] = [];
     const ports: ModelPort[] = [];
+    const nested: [SnapshotNode, string[]][] = [];
     let loose: ModelRow[] | undefined;
+    let order = 0;
 
-    const decorative = (node: SnapshotNode, parent: SnapshotNode) =>
-      node.kind === "compartment" &&
-      sameDiagramElement(node.targetObjectId, parent.targetObjectId);
-    const toRow = (node: SnapshotNode): ModelRow => {
-      claim(node, root.id, node.id);
-      const label = parseNodeLabel(node.label, node.outsideLabels);
-      const source = node.label?.trim()
-        ? node.label
-        : (node.outsideLabels ?? []).join(" ");
+    const decorative = (child: SnapshotNode, owner: SnapshotNode) =>
+      child.kind === "compartment" &&
+      sameDiagramElement(child.targetObjectId, owner.targetObjectId);
+    const toRow = (child: SnapshotNode): ModelRow => {
+      claim(child, node.id, child.id);
+      const label = parseNodeLabel(child.label, child.outsideLabels);
+      const source = child.label?.trim()
+        ? child.label
+        : (child.outsideLabels ?? []).join(" ");
       return {
-        id: node.id,
-        targetObjectId: semanticId(node.targetObjectId),
+        id: child.id,
+        targetObjectId: semanticId(child.targetObjectId),
         text: label.stereotypes.length ? label.name : rowText(source),
         title: source.replace(/\s+/g, " ").trim(),
       };
     };
-    const collectRows = (section: SnapshotNode, depth = 0): ModelRow[] => {
+    const collectRows = (section: SnapshotNode, level = 0): ModelRow[] => {
       const rows: ModelRow[] = [];
       for (const child of children.get(section.id) ?? []) {
         if (child.kind === "port") continue;
-        if (decorative(child, section) && depth < 8) {
-          rows.push(...collectRows(child, depth + 1));
+        if (decorative(child, section) && level < 8) {
+          rows.push(...collectRows(child, level + 1));
         } else rows.push(toRow(child));
       }
       return rows.filter((row) => row.text);
     };
+    const addPort = (child: SnapshotNode) => {
+      portIds.add(child.id);
+      const rect = authoredRect(child);
+      const label = (child.label?.trim() ? child.label : "") ||
+        (child.outsideLabels ?? []).filter(Boolean).join(" ");
+      let side: PortSide = incoming.has(child.id) && !outgoing.has(child.id)
+        ? "west"
+        : "east";
+      if (rect && blockRect) {
+        const distances: [PortSide, number][] = [
+          ["west", Math.abs(rect.x + rect.width / 2 - blockRect.x)],
+          [
+            "east",
+            Math.abs(rect.x + rect.width / 2 - blockRect.x - blockRect.width),
+          ],
+          ["north", Math.abs(rect.y + rect.height / 2 - blockRect.y)],
+          [
+            "south",
+            Math.abs(rect.y + rect.height / 2 - blockRect.y - blockRect.height),
+          ],
+        ];
+        side = distances.sort((a, b) => a[1] - b[1])[0][0];
+      }
+      const direction = portDirection(child);
+      ports.push({
+        id: child.id,
+        targetObjectId: semanticId(child.targetObjectId),
+        label: label.replace(/\s+/g, " ").trim(),
+        side,
+        ...(direction && { direction }),
+        authored: rect && blockRect ? rect : undefined,
+      });
+    };
+    const addRegion = (holder: SnapshotNode, title: string) => {
+      const region = {
+        id: holder.id,
+        title,
+        order: order++,
+        // A frame is its own region: no band of its own to place.
+        authored: holder === node
+          ? undefined
+          : authoredRect(holder) ?? undefined,
+        children: [] as string[],
+      };
+      regions.push(region);
+      for (const child of children.get(holder.id) ?? []) {
+        if (child.kind === "port") {
+          if (holder === node) addPort(child);
+        } else nested.push([child, region.children]);
+      }
+    };
 
-    for (const child of children.get(root.id) ?? []) {
-      if (child.kind === "port") {
-        portIds.add(child.id);
-        const rect = authoredRect(child);
-        const label = (child.label?.trim() ? child.label : "") ||
-          (child.outsideLabels ?? []).filter(Boolean).join(" ");
-        let side: PortSide = incoming.has(child.id) && !outgoing.has(child.id)
-          ? "west"
-          : "east";
-        if (rect && rootRect) {
-          const distances: [PortSide, number][] = [
-            ["west", Math.abs(rect.x + rect.width / 2 - rootRect.x)],
-            [
-              "east",
-              Math.abs(rect.x + rect.width / 2 - rootRect.x - rootRect.width),
-            ],
-            ["north", Math.abs(rect.y + rect.height / 2 - rootRect.y)],
-            [
-              "south",
-              Math.abs(rect.y + rect.height / 2 - rootRect.y - rootRect.height),
-            ],
-          ];
-          side = distances.sort((a, b) => a[1] - b[1])[0][0];
+    if (control) {
+      for (const child of children.get(node.id) ?? []) {
+        if (child.kind === "port") addPort(child);
+      }
+    } else if (holdsNodes(node)) {
+      // A view frame (or a free-form node): its children are blocks.
+      addRegion(node, "");
+    } else {
+      for (const child of children.get(node.id) ?? []) {
+        if (child.kind === "port") {
+          addPort(child);
+          loose = undefined;
+        } else if (decorative(child, node) && holdsNodes(child)) {
+          loose = undefined;
+          addRegion(child, parseNodeLabel(child.label).name);
+        } else if (decorative(child, node)) {
+          loose = undefined;
+          const rows = collectRows(child);
+          if (rows.length) {
+            sections.push({
+              id: child.id,
+              title: parseNodeLabel(child.label).name,
+              rows,
+              order: order++,
+              authored: authoredRect(child) ?? undefined,
+            });
+          }
+        } else {
+          const row = toRow(child);
+          if (!row.text) continue;
+          if (!loose) {
+            loose = [];
+            sections.push({
+              id: `${child.id}:rows`,
+              title: "",
+              rows: loose,
+              order: order++,
+            });
+          }
+          loose.push(row);
         }
-        ports.push({
-          id: child.id,
-          targetObjectId: semanticId(child.targetObjectId),
-          label: label.replace(/\s+/g, " ").trim(),
-          side,
-          authored: rect && rootRect ? rect : undefined,
-        });
-        loose = undefined;
-      } else if (decorative(child, root)) {
-        loose = undefined;
-        const rows = collectRows(child);
-        if (rows.length) {
-          sections.push({
-            id: child.id,
-            title: parseNodeLabel(child.label).name,
-            rows,
-          });
-        }
-      } else {
-        const row = toRow(child);
-        if (!row.text) continue;
-        if (!loose) {
-          loose = [];
-          sections.push({ id: `${child.id}:rows`, title: "", rows: loose });
-        }
-        loose.push(row);
       }
     }
+    const caption = control
+      ? (node.outsideLabels ?? []).map((label) => label.trim()).filter(Boolean)
+        .join(" ") || undefined
+      : undefined;
+    // A view frame names a standard view: keep the last segment of its type.
+    const name = shape === "frame"
+      ? parsed.name.replace(/(?:[\w$]+::)+/g, "")
+      : parsed.name;
     blocks.push({
-      id: root.id,
-      targetObjectId: semanticId(root.targetObjectId),
-      name: parsed.name,
-      title: (root.label?.trim() ? root.label : parsed.name).replace(
+      id: node.id,
+      targetObjectId: semanticId(node.targetObjectId),
+      name: control ? caption ?? "" : name,
+      title: (node.label?.trim() ? node.label : parsed.name).replace(
         /\s+/g,
         " ",
       ).trim(),
@@ -525,19 +742,31 @@ export function buildDiagramModel(
       marker: info?.marker,
       tone: info?.tone ?? "neutral",
       definition: info?.definition ?? false,
-      shape: controlShape(root),
+      shape,
       sections,
+      regions,
       ports,
       rowCount: sections.reduce((sum, section) => sum + section.rows.length, 0),
-      authored: rootRect ?? undefined,
+      ...(parent && { parent }),
+      depth,
+      ...(caption && { caption }),
+      ...(node.faded && { faded: true }),
+      authored: blockRect ?? undefined,
     });
-  }
+    for (const [child, list] of nested) {
+      if (placed.has(child.id)) continue;
+      list.push(child.id);
+      addBlock(child, node.id, depth + 1);
+    }
+  };
+  for (const root of roots) addBlock(root);
 
   const modelEdges: ModelEdge[] = [];
   for (const edge of edges) {
     const sourceBlock = edge.sourceId ? owner.get(edge.sourceId) : undefined;
     const targetBlock = edge.targetId ? owner.get(edge.targetId) : undefined;
     if (!sourceBlock || !targetBlock) continue;
+    const marker = edgeMarker(edge);
     modelEdges.push({
       id: edge.id,
       targetObjectId: semanticId(edge.targetObjectId),
@@ -554,7 +783,9 @@ export function buildDiagramModel(
       label: edge.label?.trim() || undefined,
       beginLabel: edge.beginLabel?.trim() || undefined,
       endLabel: edge.endLabel?.trim() || undefined,
-      marker: edgeMarker(edge),
+      marker,
+      decoration: edgeDecoration(edge, marker),
+      ...(edge.faded && { faded: true }),
       routing: edge.routingPoints?.filter((point) =>
         finite(point.x) && finite(point.y)
       ),
@@ -698,6 +929,13 @@ export const BLOCK = {
   portLabelMax: 150,
   radius: 8,
   control: 28,
+  /** Region (free-form compartment) title band and inner padding. */
+  regionTitle: 24,
+  regionPad: 16,
+  /** Smallest drawn region when it has no authored size. */
+  regionMin: 64,
+  /** Caption line under a control node. */
+  caption: 14,
 } as const;
 
 export interface ContentRow {
@@ -716,13 +954,25 @@ export interface ContentSection {
   readonly rows: readonly ContentRow[];
   /** "+N more" line: hidden rows of this section. */
   readonly more?: { readonly count: number; readonly y: number };
+  /** Containers: the section's band, from `y` (else it ends after its rows). */
+  readonly height?: number;
+}
+/** A free-form compartment band of a container, relative to the block. */
+export interface ContentRegion {
+  readonly id: string;
+  readonly title: string;
+  readonly y: number;
+  readonly height: number;
 }
 export interface BlockContent {
   readonly pillWidth: number;
   readonly nameLines: readonly string[];
   readonly qualifier?: string;
   readonly headerHeight: number;
+  /** Containers: where the header starts in its band (centered). */
+  readonly headerTop: number;
   readonly sections: readonly ContentSection[];
+  readonly regions: readonly ContentRegion[];
   /** Height the content needs; authored blocks may be shorter or taller. */
   readonly height: number;
 }
@@ -747,10 +997,19 @@ export function preferredBlockSize(
   block: ModelBlock,
   measure: TextMeasure,
 ): { width: number; height: number } {
-  if (block.shape !== "card") {
+  if (block.shape !== "card" && block.shape !== "frame") {
     return block.shape === "bar"
       ? { width: 60, height: 8 }
       : { width: BLOCK.control, height: BLOCK.control };
+  }
+  if (isContainer(block)) {
+    // The header and list sections; regions at their smallest.
+    const width = containerWidth(block, measure);
+    return {
+      width,
+      height: compartmentSlots(block, width, measure, () => BLOCK.regionMin)
+        .height,
+    };
   }
   const pill = pillWidth(block.marker, measure);
   const header = BLOCK.padX * 2 + (pill ? pill + BLOCK.pillGap : 0) +
@@ -812,16 +1071,17 @@ export function layoutBlockContent(
   const pill = pillWidth(block.marker, measure);
   const nameX = BLOCK.padX + (pill ? pill + BLOCK.pillGap : 0);
   const nameWidth = Math.max(24, blockWidth - nameX - BLOCK.padX);
-  const nameLines = block.shape === "card"
+  const titled = block.shape === "card" || block.shape === "frame";
+  const nameLines = titled
     ? wrapText(
       block.name,
       nameWidth,
-      BLOCK.maxNameLines,
+      block.shape === "frame" ? 1 : BLOCK.maxNameLines,
       width(measure, FONTS.name),
     )
     : [];
   const qualifier = qualifierText(block);
-  const headerHeight = block.shape === "card"
+  const headerHeight = titled
     ? BLOCK.padTop + Math.max(1, nameLines.length) * BLOCK.nameLine +
       (qualifier ? BLOCK.qualifierLine : 0) + BLOCK.headerBottom
     : 0;
@@ -869,9 +1129,206 @@ export function layoutBlockContent(
     nameLines,
     qualifier,
     headerHeight,
+    headerTop: 0,
     sections,
+    regions: [],
     height: Math.max(BLOCK.minHeight, y + (sections.length ? BLOCK.bottom : 0)),
   };
+}
+
+/** Header width of a container: its name on one line, within bounds. */
+function containerWidth(block: ModelBlock, measure: TextMeasure): number {
+  const pill = pillWidth(block.marker, measure);
+  let content = BLOCK.padX * 2 + (pill ? pill + BLOCK.pillGap : 0) +
+    measure(block.name, FONTS.name);
+  for (const section of block.sections) {
+    for (const row of section.rows.slice(0, BLOCK.maxRows)) {
+      content = Math.max(
+        content,
+        BLOCK.padX * 2 + 4 + measure(row.text, FONTS.row),
+      );
+    }
+  }
+  return Math.round(
+    Math.min(BLOCK.maxWidth * 1.4, Math.max(BLOCK.minWidth, content)),
+  );
+}
+
+/** Height a list section needs for its title and (capped) rows. */
+function sectionHeight(section: ModelSection): number {
+  const shown = Math.min(section.rows.length, BLOCK.maxRows + 1);
+  return (section.title ? BLOCK.sectionTitle : 4) + shown * BLOCK.row +
+    BLOCK.bottom;
+}
+
+export interface CompartmentSlot {
+  readonly id: string;
+  readonly region: boolean;
+  /** Top of the band, relative to the block. */
+  readonly y: number;
+  readonly height: number;
+}
+
+/**
+ * A container's compartments stacked in model order under its header:
+ * sections at the height their rows need, regions at the height `regionHeight`
+ * gives them (the nested layout). Used where SysON authored no geometry
+ * (fallback grid, Auto layout).
+ */
+export function compartmentSlots(
+  block: ModelBlock,
+  blockWidth: number,
+  measure: TextMeasure,
+  regionHeight: (region: ModelRegion) => number,
+): { slots: CompartmentSlot[]; headerHeight: number; height: number } {
+  const header = layoutBlockContent(
+    { ...block, sections: [] },
+    blockWidth,
+    undefined,
+    measure,
+  ).headerHeight;
+  const slots: CompartmentSlot[] = [];
+  let y = header;
+  const ordered = [
+    ...block.sections.map((section) => ({
+      id: section.id,
+      order: section.order,
+      region: false,
+      height: sectionHeight(section),
+    })),
+    ...block.regions.map((region) => ({
+      id: region.id,
+      order: region.order,
+      region: true,
+      height: Math.max(BLOCK.regionMin, regionHeight(region)),
+    })),
+  ].sort((a, b) => a.order - b.order);
+  for (const { id, region, height } of ordered) {
+    slots.push({ id, region, y, height });
+    y += height;
+  }
+  return { slots, headerHeight: header, height: Math.max(BLOCK.minHeight, y) };
+}
+
+/**
+ * A container's content in its rectangle: the header centered in the band
+ * above the first compartment, then each compartment where SysON put it
+ * (`slots` overrides, e.g. for the Auto layout). Rows that do not fit their
+ * section fold into its "+N more" line.
+ */
+export function layoutContainerContent(
+  block: ModelBlock,
+  rect: DiagramRect,
+  measure: TextMeasure,
+  slots?: readonly CompartmentSlot[],
+): BlockContent {
+  const head = layoutBlockContent(
+    { ...block, sections: [] },
+    rect.width,
+    undefined,
+    measure,
+  );
+  const placed = new Map<string, { y: number; height: number }>();
+  if (slots) {
+    for (const slot of slots) placed.set(slot.id, slot);
+  } else {
+    // Authored compartments; the others stack after the last placed one.
+    const stacked = compartmentSlots(block, rect.width, measure, () =>
+      BLOCK.regionMin).slots;
+    let cursor = head.headerHeight;
+    for (const slot of stacked) {
+      const authored = block.sections.find((section) => section.id === slot.id)
+        ?.authored ??
+        block.regions.find((region) => region.id === slot.id)?.authored;
+      const band = authored
+        ? { y: authored.y - rect.y, height: authored.height }
+        : { y: cursor, height: slot.height };
+      placed.set(slot.id, band);
+      cursor = band.y + band.height;
+    }
+  }
+  const tops = [...placed.values()].map((band) => band.y);
+  const band = tops.length ? Math.min(...tops) : rect.height;
+  const headerTop = block.shape === "frame"
+    ? 0
+    : Math.max(0, Math.min(24, (band - head.headerHeight) / 2));
+  const rowWidth = rect.width - BLOCK.padX * 2 - 4;
+  const rowFit = width(measure, FONTS.row);
+  const sections: ContentSection[] = [];
+  for (const section of block.sections) {
+    const slot = placed.get(section.id);
+    if (!slot) continue;
+    const limit = slot.y + slot.height - BLOCK.bottom + 2;
+    let y = slot.y + (section.title ? BLOCK.sectionTitle : 4);
+    const rows: ContentRow[] = [];
+    let more: ContentSection["more"];
+    for (const [index, row] of section.rows.entries()) {
+      const remaining = section.rows.length - index;
+      const lastFits = y + BLOCK.row <= limit;
+      const roomForAll = y + BLOCK.row * remaining <= limit;
+      if (
+        (index === BLOCK.maxRows && remaining > 0) ||
+        (!roomForAll && remaining > 1 && y + BLOCK.row * 2 > limit && lastFits)
+      ) {
+        more = { count: remaining, y };
+        break;
+      }
+      if (!lastFits) break;
+      rows.push({
+        id: row.id,
+        targetObjectId: row.targetObjectId,
+        text: ellipsize(row.text, rowWidth, rowFit),
+        title: row.title,
+        y,
+      });
+      y += BLOCK.row;
+    }
+    sections.push({
+      id: section.id,
+      title: section.title,
+      y: slot.y,
+      rows,
+      more,
+      height: slot.height,
+    });
+  }
+  // A frame's region is everything under its title tab.
+  const regions: ContentRegion[] = block.shape === "frame"
+    ? block.regions.map((region) => ({
+      id: region.id,
+      title: "",
+      y: head.headerHeight,
+      height: Math.max(0, rect.height - head.headerHeight),
+    }))
+    : block.regions.flatMap((region) => {
+      const slot = placed.get(region.id);
+      return slot ? [{ id: region.id, title: region.title, ...slot }] : [];
+    });
+  return {
+    ...head,
+    headerTop,
+    sections,
+    regions,
+    height: rect.height,
+  };
+}
+
+/** Content of any drawn block: containers by compartment, others stacked. */
+export function blockContent(
+  block: ModelBlock,
+  rect: DiagramRect,
+  authored: boolean,
+  measure: TextMeasure,
+  slots?: readonly CompartmentSlot[],
+): BlockContent {
+  return isContainer(block)
+    ? layoutContainerContent(block, rect, measure, slots)
+    : layoutBlockContent(
+      block,
+      rect.width,
+      authored ? rect.height : undefined,
+      measure,
+    );
 }
 
 // ── Scene ───────────────────────────────────────────────────────────────────
@@ -881,7 +1338,10 @@ export interface ScenePort {
   readonly targetObjectId?: string;
   readonly label: string;
   readonly side: PortSide;
+  readonly direction?: "in" | "out";
   readonly rect: DiagramRect;
+  /** North/south labels that would overlap stack away from the block. */
+  readonly labelRow?: number;
 }
 export interface SceneBlock {
   readonly block: ModelBlock;
@@ -893,6 +1353,8 @@ export interface SceneEdgeLabel {
   readonly text: string;
   readonly x: number;
   readonly y: number;
+  /** The center label is placed clear of blocks; end labels stay by their end. */
+  readonly role?: "center" | "begin" | "end";
 }
 export interface SceneEdge {
   readonly edge: ModelEdge;
@@ -1094,6 +1556,7 @@ function placePorts(
         targetObjectId: port.targetObjectId,
         label: port.label,
         side: port.side,
+        direction: port.direction,
         rect: port.authored,
       };
     }
@@ -1107,6 +1570,7 @@ function placePorts(
       targetObjectId: port.targetObjectId,
       label: port.label,
       side: port.side,
+      direction: port.direction,
       rect: vertical
         ? {
           x: port.side === "west" ? rect.x - half : rect.x + rect.width - half,
@@ -1126,14 +1590,136 @@ function placePorts(
   });
 }
 
-/** SysON layout: authored positions; a tidy grid for blocks SysON never placed. */
+/** Grid placement of `ids` (layered by `links`), relative to 0,0. */
+function gridPlacement(
+  ids: readonly string[],
+  sizes: ReadonlyMap<string, { width: number; height: number }>,
+  links: readonly (readonly [string, string])[],
+  gap: { x: number; y: number } = GRID_GAP,
+): { positions: Map<string, DiagramPoint>; width: number; height: number } {
+  const cells = fallbackCells(ids, links, gridColumns(ids.length));
+  const columnWidths: number[] = [];
+  const rowHeights: number[] = [];
+  for (const [id, cell] of cells) {
+    const size = sizes.get(id)!;
+    columnWidths[cell.column] = Math.max(
+      columnWidths[cell.column] ?? 0,
+      size.width,
+    );
+    rowHeights[cell.row] = Math.max(rowHeights[cell.row] ?? 0, size.height);
+  }
+  const offsets = (values: number[], step: number) => {
+    const starts: number[] = [];
+    let position = 0;
+    for (let index = 0; index < values.length; index++) {
+      starts.push(position);
+      position += (values[index] ?? 0) + (values[index] ? step : 0);
+    }
+    return {
+      starts,
+      total: Math.max(0, position - (values.length ? step : 0)),
+    };
+  };
+  const columns = offsets(columnWidths, gap.x);
+  const rows = offsets(rowHeights, gap.y);
+  const positions = new Map<string, DiagramPoint>();
+  for (const [id, cell] of cells) {
+    const size = sizes.get(id)!;
+    positions.set(id, {
+      x: columns.starts[cell.column] +
+        ((columnWidths[cell.column] ?? 0) - size.width) / 2,
+      y: rows.starts[cell.row],
+    });
+  }
+  return { positions, width: columns.total, height: rows.total };
+}
+
+const NESTED_GAP = { x: 48, y: 44 };
+
+/**
+ * SysON layout: authored positions. Blocks SysON never placed get a tidy
+ * grid: top-level ones under the authored drawing, nested ones inside their
+ * region (a container without geometry grows around its grid).
+ */
 export function sysonScene(
   model: DiagramModel,
   measure: TextMeasure,
 ): DiagramScene {
+  const byId = new Map(model.blocks.map((block) => [block.id, block]));
+  const kids = new Map<string | undefined, ModelBlock[]>();
+  const regionOf = new Map<string, ModelRegion>();
+  for (const block of model.blocks) {
+    const list = kids.get(block.parent) ?? [];
+    list.push(block);
+    kids.set(block.parent, list);
+    for (const region of block.regions) {
+      for (const id of region.children) regionOf.set(id, region);
+    }
+  }
+  /** The sibling under `parent` that holds `id` (itself or an ancestor). */
+  const liftTo = (id: string, parent: string | undefined) => {
+    let block = byId.get(id);
+    for (
+      let depth = 0;
+      block && block.parent !== parent && depth < 64;
+      depth++
+    ) {
+      block = block.parent ? byId.get(block.parent) : undefined;
+    }
+    return block?.parent === parent ? block?.id : undefined;
+  };
+  const linksAmong = (parent: string | undefined) =>
+    model.edges.flatMap((edge) => {
+      const a = liftTo(edge.sourceBlock, parent);
+      const b = liftTo(edge.targetBlock, parent);
+      return a && b && a !== b ? [[a, b] as const] : [];
+    });
+
+  // Sizes of blocks SysON never placed, bottom-up; free children of each
+  // container get grid offsets inside its region.
+  const sizes = new Map<string, { width: number; height: number }>();
+  const offsets = new Map<string, DiagramPoint>();
+  const regionHeights = new Map<string, number>();
+  const gridChildren = (parent: string) => {
+    const free = (kids.get(parent) ?? []).filter((child) => !child.authored);
+    if (!free.length) return undefined;
+    for (const child of free) sizeOf(child);
+    const grid = gridPlacement(
+      free.map((child) => child.id),
+      sizes,
+      linksAmong(parent),
+      NESTED_GAP,
+    );
+    for (const [id, point] of grid.positions) offsets.set(id, point);
+    return grid;
+  };
+  const sizeOf = (block: ModelBlock): { width: number; height: number } => {
+    const known = sizes.get(block.id);
+    if (known) return known;
+    let size = preferredBlockSize(block, measure);
+    if (isContainer(block) && !block.authored) {
+      const grid = gridChildren(block.id);
+      const regionHeight = grid
+        ? grid.height + BLOCK.regionTitle + BLOCK.regionPad
+        : BLOCK.regionMin;
+      regionHeights.set(block.id, regionHeight);
+      const width = Math.max(
+        size.width,
+        (grid?.width ?? 0) + BLOCK.regionPad * 2,
+      );
+      size = {
+        width,
+        height: compartmentSlots(block, width, measure, () => regionHeight)
+          .height,
+      };
+    }
+    sizes.set(block.id, size);
+    return size;
+  };
+
   const rects = new Map<string, DiagramRect>();
   let authoredBottom = -Infinity, authoredLeft = Infinity;
-  for (const block of model.blocks) {
+  for (const block of kids.get(undefined) ?? []) {
     if (!block.authored) continue;
     rects.set(block.id, block.authored);
     authoredBottom = Math.max(
@@ -1142,60 +1728,146 @@ export function sysonScene(
     );
     authoredLeft = Math.min(authoredLeft, block.authored.x);
   }
-  const free = model.blocks.filter((block) => !block.authored);
-  if (free.length) {
-    const sizes = new Map(
-      free.map((block) => [block.id, preferredBlockSize(block, measure)]),
+  const freeRoots = (kids.get(undefined) ?? []).filter((block) =>
+    !block.authored
+  );
+  if (freeRoots.length) {
+    for (const block of freeRoots) sizeOf(block);
+    const grid = gridPlacement(
+      freeRoots.map((block) => block.id),
+      sizes,
+      linksAmong(undefined),
     );
-    const links = model.edges.map((edge) =>
-      [edge.sourceBlock, edge.targetBlock] as const
-    );
-    const cells = fallbackCells(
-      free.map((block) => block.id),
-      links,
-      gridColumns(free.length),
-    );
-    const columnWidths: number[] = [];
-    const rowHeights: number[] = [];
-    for (const [id, cell] of cells) {
-      const size = sizes.get(id)!;
-      columnWidths[cell.column] = Math.max(
-        columnWidths[cell.column] ?? 0,
-        size.width,
-      );
-      rowHeights[cell.row] = Math.max(rowHeights[cell.row] ?? 0, size.height);
-    }
-    const offsets = (values: number[], gap: number) => {
-      const starts: number[] = [];
-      let position = 0;
-      for (let index = 0; index < values.length; index++) {
-        starts.push(position);
-        position += (values[index] ?? 0) + (values[index] ? gap : 0);
-      }
-      return starts;
-    };
-    const columnX = offsets(columnWidths, GRID_GAP.x);
-    const rowY = offsets(rowHeights, GRID_GAP.y);
     const originX = Number.isFinite(authoredLeft) ? authoredLeft : 0;
     const originY = Number.isFinite(authoredBottom) ? authoredBottom + 96 : 0;
-    for (const [id, cell] of cells) {
-      const size = sizes.get(id)!;
+    for (const [id, point] of grid.positions) {
       rects.set(id, {
-        x: originX + columnX[cell.column] +
-          ((columnWidths[cell.column] ?? 0) - size.width) / 2,
-        y: originY + rowY[cell.row],
-        ...size,
+        x: originX + point.x,
+        y: originY + point.y,
+        ...sizes.get(id)!,
       });
     }
   }
+  // Nested blocks, parents first: authored, else at their grid offset in
+  // the region (under the authored children it already holds).
+  const gridded = new Set<string>();
+  for (const block of model.blocks) {
+    if (!block.parent) continue;
+    if (block.authored) {
+      rects.set(block.id, block.authored);
+      continue;
+    }
+    const parent = byId.get(block.parent)!;
+    const parentRect = rects.get(parent.id)!;
+    if (!gridded.has(parent.id)) {
+      gridded.add(parent.id);
+      if (parent.authored) gridChildren(parent.id);
+    }
+    const region = regionOf.get(block.id);
+    let origin: DiagramPoint;
+    if (parent.authored && region?.authored) {
+      const placed = region.children.flatMap((id) => {
+        const child = byId.get(id);
+        return child?.authored
+          ? [child.authored.y + child.authored.height]
+          : [];
+      });
+      origin = {
+        x: region.authored.x + BLOCK.regionPad,
+        y: placed.length
+          ? Math.max(...placed) + NESTED_GAP.y
+          : region.authored.y + BLOCK.regionTitle,
+      };
+    } else {
+      const slots = compartmentSlots(
+        parent,
+        parentRect.width,
+        measure,
+        () => regionHeights.get(parent.id) ?? BLOCK.regionMin,
+      );
+      const slot = slots.slots.find((item) => item.id === region?.id) ??
+        { y: slots.headerHeight };
+      origin = {
+        x: parentRect.x + BLOCK.regionPad,
+        y: parentRect.y + slot.y + BLOCK.regionTitle,
+      };
+    }
+    const offset = offsets.get(block.id) ?? { x: 0, y: 0 };
+    rects.set(block.id, {
+      x: origin.x + offset.x,
+      y: origin.y + offset.y,
+      ...sizeOf(block),
+    });
+  }
+
+  // A placed container grows around what it now holds (blocks SysON never
+  // placed land under its authored children): children first, so the
+  // growth reaches every ancestor. Bands after the region move down.
+  const grown = new Map<string, Map<string, number>>();
+  for (let index = model.blocks.length - 1; index >= 0; index--) {
+    const child = model.blocks[index];
+    const parent = child.parent ? byId.get(child.parent) : undefined;
+    const region = regionOf.get(child.id);
+    if (!parent?.authored || !region) continue;
+    const box = rects.get(child.id)!, outer = rects.get(parent.id)!;
+    const band = parent.shape === "frame" || !region.authored
+      ? { y: outer.y, height: outer.height }
+      : {
+        y: region.authored.y,
+        height: region.authored.height +
+          (grown.get(parent.id)?.get(region.id) ?? 0),
+      };
+    const extra = box.y + box.height + BLOCK.regionPad - (band.y + band.height);
+    const wider = box.x + box.width + BLOCK.regionPad - (outer.x + outer.width);
+    if (extra <= 0.5 && wider <= 0.5) continue;
+    const added = Math.max(0, extra);
+    const bands = grown.get(parent.id) ?? new Map<string, number>();
+    bands.set(region.id, (bands.get(region.id) ?? 0) + added);
+    grown.set(parent.id, bands);
+    rects.set(parent.id, {
+      ...outer,
+      width: outer.width + Math.max(0, wider),
+      height: outer.height + added,
+    });
+  }
+  /** A grown container's compartments: authored, shifted under the growth. */
+  const grownSlots = (block: ModelBlock, rect: DiagramRect) => {
+    const extra = grown.get(block.id);
+    if (!extra || block.shape === "frame") return undefined;
+    const origin = block.authored!;
+    const bands = [
+      ...block.sections.map((item) => ({ ...item, region: false })),
+      ...block.regions.map((item) => ({ ...item, region: true })),
+    ].filter((item) => item.authored).sort((a, b) =>
+      a.authored!.y - b.authored!.y
+    );
+    let shift = 0;
+    return bands.map((item): CompartmentSlot => {
+      const added = extra.get(item.id) ?? 0;
+      const slot = {
+        id: item.id,
+        region: item.region,
+        y: item.authored!.y - origin.y + shift,
+        height: item.authored!.height + added,
+      };
+      shift += added;
+      return slot;
+    }).filter((slot) => slot.y < rect.height);
+  };
+
   const blocks = model.blocks.map((block) => {
     const rect = rects.get(block.id)!;
-    const content = layoutBlockContent(
-      block,
-      rect.width,
-      block.authored ? rect.height : undefined,
-      measure,
-    );
+    const slots = isContainer(block) && !block.authored
+      ? compartmentSlots(
+        block,
+        rect.width,
+        measure,
+        () => regionHeights.get(block.id) ?? BLOCK.regionMin,
+      ).slots
+      : isContainer(block)
+      ? grownSlots(block, rect)
+      : undefined;
+    const content = blockContent(block, rect, !!block.authored, measure, slots);
     return {
       block,
       rect,
@@ -1527,16 +2199,25 @@ export function routeSceneEdges(
     let points: DiagramPoint[];
     const routing = edge.routing ?? [];
     if (routing.length) {
+      // SysON's bends, attached on the side facing them, kept orthogonal.
       const first = routing[0], last = routing.at(-1)!;
-      const startBox = plan.sourcePort?.rect ?? plan.source.rect;
-      const endBox = plan.targetPort?.rect ?? plan.target.rect;
-      points = simplifyRoute([
-        plan.sourcePort
-          ? portAnchor(plan.sourcePort)
-          : clipToBox(startBox, first),
-        ...routing,
-        plan.targetPort ? portAnchor(plan.targetPort) : clipToBox(endBox, last),
-      ]);
+      const start = plan.sourcePort
+        ? {
+          point: portAnchor(plan.sourcePort),
+          vertical: isVerticalSide(plan.sourcePort.side),
+        }
+        : anchorToward(plan.source.rect, first);
+      const end = plan.targetPort
+        ? {
+          point: portAnchor(plan.targetPort),
+          vertical: isVerticalSide(plan.targetPort.side),
+        }
+        : anchorToward(plan.target.rect, last);
+      points = orthogonalize(
+        [start.point, ...routing, end.point],
+        start.vertical,
+        end.vertical,
+      );
     } else if (
       plan.source === plan.target && !plan.sourcePort && !plan.targetPort
     ) {
@@ -1561,16 +2242,75 @@ export function routeSceneEdges(
   });
 }
 
-/** Point where the segment from the box center to `toward` leaves the box. */
-function clipToBox(box: DiagramRect, toward: DiagramPoint): DiagramPoint {
+const isVerticalSide = (side: PortSide) => side === "north" || side === "south";
+
+/**
+ * Where an edge leaves `box` toward a bend: straight above or below it when
+ * the bend is within the box's width, beside it when within its height,
+ * else from the middle of the side with the larger gap. `vertical` tells
+ * which way the first segment runs.
+ */
+export function anchorToward(
+  box: DiagramRect,
+  toward: DiagramPoint,
+): { point: DiagramPoint; vertical: boolean } {
+  const right = box.x + box.width, bottom = box.y + box.height;
+  const inset = Math.min(6, box.width / 4, box.height / 4);
+  if (toward.x >= box.x + inset && toward.x <= right - inset) {
+    return {
+      point: { x: toward.x, y: toward.y < box.y ? box.y : bottom },
+      vertical: true,
+    };
+  }
+  if (toward.y >= box.y + inset && toward.y <= bottom - inset) {
+    return {
+      point: { x: toward.x < box.x ? box.x : right, y: toward.y },
+      vertical: false,
+    };
+  }
   const c = center(box);
-  const dx = toward.x - c.x, dy = toward.y - c.y;
-  if (!dx && !dy) return c;
-  const scale = Math.min(
-    dx ? box.width / 2 / Math.abs(dx) : Infinity,
-    dy ? box.height / 2 / Math.abs(dy) : Infinity,
-  );
-  return { x: c.x + dx * Math.min(1, scale), y: c.y + dy * Math.min(1, scale) };
+  const dx = Math.abs(toward.x - c.x) - box.width / 2;
+  const dy = Math.abs(toward.y - c.y) - box.height / 2;
+  return dy >= dx
+    ? { point: { x: c.x, y: toward.y < c.y ? box.y : bottom }, vertical: true }
+    : { point: { x: toward.x < c.x ? box.x : right, y: c.y }, vertical: false };
+}
+
+/**
+ * Orthogonal polyline through `points`: an elbow between two points that
+ * are not aligned. The first segment runs as `startVertical` says, the last
+ * as `endVertical` says, the ones between turn at each elbow.
+ */
+export function orthogonalize(
+  points: readonly DiagramPoint[],
+  startVertical: boolean,
+  endVertical: boolean,
+): DiagramPoint[] {
+  const out: DiagramPoint[] = [];
+  let vertical = startVertical;
+  points.forEach((point, index) => {
+    const previous = out.at(-1);
+    if (!previous) {
+      out.push(point);
+      return;
+    }
+    const aligned = Math.abs(previous.x - point.x) < 0.5 ||
+      Math.abs(previous.y - point.y) < 0.5;
+    if (!aligned) {
+      const last = index === points.length - 1;
+      // The last elbow makes the final segment enter as `endVertical` says.
+      const firstLeg = last ? !endVertical : vertical;
+      out.push(
+        firstLeg
+          ? { x: previous.x, y: point.y }
+          : { x: point.x, y: previous.y },
+      );
+    }
+    out.push(point);
+    const tail = out.slice(-2);
+    vertical = Math.abs(tail[0].x - tail[1].x) < 0.5 ? false : true;
+  });
+  return simplifyRoute(out);
 }
 
 /** Point at `fraction` of the polyline length. */
@@ -1596,20 +2336,82 @@ export function pointAlong(
   return points.at(-1)!;
 }
 
+/**
+ * The middle of the longest segment: on a routed edge that is the run in
+ * open space, not a short stub against a block.
+ */
+export function labelPoint(points: readonly DiagramPoint[]): DiagramPoint {
+  let best = -1, at = pointAlong(points, 0.5);
+  for (let index = 1; index < points.length; index++) {
+    const a = points[index - 1], b = points[index];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length > best + 0.5) {
+      best = length;
+      at = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+  }
+  return at;
+}
+
 function edgeLabels(
   edge: ModelEdge,
   points: readonly DiagramPoint[],
 ): SceneEdgeLabel[] {
   if (points.length < 2) return [];
   const labels: SceneEdgeLabel[] = [];
-  if (edge.label) labels.push({ text: edge.label, ...pointAlong(points, 0.5) });
+  if (edge.label) {
+    labels.push({ text: edge.label, ...labelPoint(points), role: "center" });
+  }
   if (edge.beginLabel) {
-    labels.push({ text: edge.beginLabel, ...pointAlong(points, 0.12) });
+    labels.push({
+      text: edge.beginLabel,
+      ...pointAlong(points, 0.12),
+      role: "begin",
+    });
   }
   if (edge.endLabel) {
-    labels.push({ text: edge.endLabel, ...pointAlong(points, 0.88) });
+    labels.push({
+      text: edge.endLabel,
+      ...pointAlong(points, 0.88),
+      role: "end",
+    });
   }
   return labels;
+}
+
+export const PORT_LABEL_LINE = 13;
+
+/**
+ * Rows for the labels of ports on a north or south side: each label takes
+ * the row nearest the block where it overlaps no label already placed.
+ */
+export function stackPortLabels(
+  ports: readonly ScenePort[],
+  measure: TextMeasure,
+): ScenePort[] {
+  const rows = new Map<string, number>();
+  for (const side of ["north", "south"] as const) {
+    const placed: { left: number; right: number; row: number }[] = [];
+    const along = ports.filter((port) => port.side === side && port.label)
+      .sort((a, b) => center(a.rect).x - center(b.rect).x);
+    for (const port of along) {
+      const half =
+        Math.min(BLOCK.portLabelMax, measure(port.label, FONTS.port)) /
+          2 + 4;
+      const x = center(port.rect).x;
+      let row = 0;
+      while (
+        placed.some((label) =>
+          label.row === row && label.left < x + half && x - half < label.right
+        )
+      ) row++;
+      placed.push({ left: x - half, right: x + half, row });
+      if (row) rows.set(port.id, row);
+    }
+  }
+  return ports.map((port) =>
+    rows.has(port.id) ? { ...port, labelRow: rows.get(port.id) } : port
+  );
 }
 
 /** Port label box (outside the block), for bounds. */
@@ -1624,6 +2426,7 @@ export function portLabelBox(
   );
   const c = center(port.rect);
   const height = 13;
+  const stack = (port.labelRow ?? 0) * PORT_LABEL_LINE;
   switch (port.side) {
     case "west":
       return {
@@ -1642,27 +2445,128 @@ export function portLabelBox(
     case "north":
       return {
         x: c.x - textWidth / 2,
-        y: port.rect.y - 4 - height,
+        y: port.rect.y - 4 - height - stack,
         width: textWidth,
         height,
       };
     case "south":
       return {
         x: c.x - textWidth / 2,
-        y: port.rect.y + port.rect.height + 4,
+        y: port.rect.y + port.rect.height + 4 + stack,
         width: textWidth,
         height,
       };
   }
 }
 
-/** Shift everything so the drawing starts at `SCENE_PADDING` from 0,0. */
-export function normalizeScene(
-  mode: DiagramLayoutMode,
+export const EDGE_LABEL_HEIGHT = 18;
+
+const overlaps = (a: DiagramRect, b: DiagramRect) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height &&
+  b.y < a.y + a.height;
+
+/** What an edge label must not cover: blocks, headers, list sections. */
+function labelObstacles(blocks: readonly SceneBlock[]): DiagramRect[] {
+  const boxes: DiagramRect[] = [];
+  for (const { block, rect, content, ports } of blocks) {
+    if (!isContainer(block)) boxes.push(rect);
+    else {
+      const tops = [
+        ...content.sections.map((section) => section.y),
+        ...content.regions.map((region) => region.y),
+      ];
+      const band = tops.length ? Math.min(...tops) : content.headerHeight;
+      boxes.push({ ...rect, height: Math.min(rect.height, band) });
+      for (const section of content.sections) {
+        boxes.push({
+          x: rect.x,
+          y: rect.y + section.y,
+          width: rect.width,
+          height: section.height ??
+            (section.rows.length + 1) * BLOCK.row,
+        });
+      }
+    }
+    for (const port of ports) boxes.push(port.rect);
+  }
+  return boxes;
+}
+
+/**
+ * Center labels where they cover no block and no other label: along the
+ * longest segments first, on the line, then beside it. A label with no free
+ * spot keeps the middle of the longest segment.
+ */
+export function placeEdgeLabels(
   blocks: readonly SceneBlock[],
   edges: readonly SceneEdge[],
   measure: TextMeasure,
+): SceneEdge[] {
+  const taken = labelObstacles(blocks);
+  return edges.map((item) => {
+    if (!item.labels.some((label) => label.role === "center")) return item;
+    const labels = item.labels.map((label) => {
+      if (label.role !== "center") return label;
+      const width = measure(label.text, FONTS.edgeLabel) + 12;
+      const h = EDGE_LABEL_HEIGHT;
+      const box = (x: number, y: number) => ({
+        x: x - width / 2,
+        y: y - h / 2,
+        width,
+        height: h,
+      });
+      const segments = item.points.slice(1).map((point, index) => ({
+        a: item.points[index],
+        b: point,
+        length: Math.hypot(
+          point.x - item.points[index].x,
+          point.y - item.points[index].y,
+        ),
+      })).sort((p, q) => q.length - p.length);
+      for (const { a, b, length } of segments) {
+        if (length < 12) continue;
+        const vertical = Math.abs(a.x - b.x) < 0.5;
+        for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+          const m = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+          const spots = vertical
+            ? [m, { x: m.x + width / 2 + 5, y: m.y }, {
+              x: m.x - width / 2 - 5,
+              y: m.y,
+            }]
+            : [m, { x: m.x, y: m.y - h / 2 - 3 }, {
+              x: m.x,
+              y: m.y + h / 2 + 3,
+            }];
+          for (const spot of spots) {
+            const candidate = box(spot.x, spot.y);
+            if (!taken.some((other) => overlaps(candidate, other))) {
+              taken.push(candidate);
+              return { ...label, x: spot.x, y: spot.y };
+            }
+          }
+        }
+      }
+      taken.push(box(label.x, label.y));
+      return label;
+    });
+    return { ...item, labels };
+  });
+}
+
+/** Shift everything so the drawing starts at `SCENE_PADDING` from 0,0. */
+export function normalizeScene(
+  mode: DiagramLayoutMode,
+  laid: readonly SceneBlock[],
+  routed: readonly SceneEdge[],
+  measure: TextMeasure,
 ): DiagramScene {
+  let edges = routed;
+  const blocks = laid.map((block) =>
+    block.ports.some((port) => port.side === "north" || port.side === "south")
+      ? { ...block, ports: stackPortLabels(block.ports, measure) }
+      : block
+  );
+  edges = placeEdgeLabels(blocks, edges, measure);
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
   const include = (rect: DiagramRect | undefined) => {
     if (!rect) return;
@@ -1848,55 +2752,130 @@ function endDirection(
   return undefined;
 }
 
-/**
- * Edge decorations (§2): hollow triangle for specialization, open arrow for
- * dependency-like links (the line is dashed), filled diamond on the owner
- * (source) side for composition, small solid arrow for flows.
- */
-export function edgeMarkerShapes(
-  marker: EdgeMarker,
+/** Shapes of one edge end, tip on the end point (or `outward` from it). */
+function tipShapes(
+  end: EdgeTip,
   points: readonly DiagramPoint[],
+  atStart: boolean,
   size: number,
 ): MarkerShape[] {
-  if (marker === "none" || points.length < 2) return [];
-  const atStart = marker === "composition";
-  const end = endDirection(points, atStart);
-  if (!end) return [];
-  const { tip, direction } = end;
+  if (end.shape === "none" || points.length < 2) return [];
+  const found = endDirection(points, atStart);
+  if (!found) return [];
+  let { tip, direction } = found;
+  const length = end.shape === "arrow"
+    ? size * 1.1
+    : end.shape.includes("ircle")
+    ? size * 0.9
+    : end.shape.includes("iamond")
+    ? size * 1.8
+    : size * 1.3;
+  if (end.outward) {
+    tip = { x: tip.x - direction.x * length, y: tip.y - direction.y * length };
+    direction = { x: -direction.x, y: -direction.y };
+  }
   const normal = { x: -direction.y, y: direction.x };
-  const at = (back: number, side: number) =>
-    `${round2(tip.x - direction.x * back + normal.x * side)} ${
-      round2(tip.y - direction.y * back + normal.y * side)
-    }`;
+  const point = (back: number, side: number) => ({
+    x: tip.x - direction.x * back + normal.x * side,
+    y: tip.y - direction.y * back + normal.y * side,
+  });
+  const at = (back: number, side: number) => {
+    const p = point(back, side);
+    return `${round2(p.x)} ${round2(p.y)}`;
+  };
   const p = `${round2(tip.x)} ${round2(tip.y)}`;
-  switch (marker) {
-    case "specialization":
-      return [{
-        d: `M${p} L${at(size * 1.3, size * 0.75)} L${
-          at(size * 1.3, -size * 0.75)
-        } Z`,
-        fill: "panel",
-      }];
-    case "dependency":
+  const triangle = `M${p} L${at(size * 1.3, size * 0.75)} L${
+    at(size * 1.3, -size * 0.75)
+  } Z`;
+  const dot = (back: number, side: number, r: number) => {
+    const c = point(back, side);
+    return `M${round2(c.x - r)} ${round2(c.y)} a${r} ${r} 0 1 0 ${
+      round2(r * 2)
+    } 0 a${r} ${r} 0 1 0 ${round2(-r * 2)} 0`;
+  };
+  switch (end.shape) {
+    case "arrow":
       return [{
         d: `M${at(size * 1.1, size * 0.6)} L${p} L${
           at(size * 1.1, -size * 0.6)
         }`,
         fill: "none",
       }];
-    case "composition":
+    case "triangle":
+      return [{ d: triangle, fill: "panel" }];
+    case "filledTriangle":
+      return [{
+        d: `M${p} L${at(size * 1.1, size * 0.55)} L${
+          at(size * 1.1, -size * 0.55)
+        } Z`,
+        fill: "line",
+      }];
+    case "diamond":
+    case "filledDiamond":
       return [{
         d: `M${p} L${at(size * 0.9, size * 0.55)} L${at(size * 1.8, 0)} L${
           at(size * 0.9, -size * 0.55)
         } Z`,
-        fill: "line",
+        fill: end.shape === "diamond" ? "panel" : "line",
       }];
-    case "flow":
+    case "circle":
+    case "filledCircle":
       return [{
-        d: `M${p} L${at(size, size * 0.5)} L${at(size, -size * 0.5)} Z`,
+        d: dot(size * 0.45, 0, size * 0.45),
+        fill: end.shape === "circle" ? "panel" : "line",
+      }];
+    case "crossedCircle": {
+      const r = size * 0.45;
+      return [{ d: dot(r, 0, r), fill: "panel" }, {
+        d: `M${at(0, 0)} L${at(r * 2, 0)} M${at(r, r)} L${at(r, -r)}`,
+        fill: "none",
+      }];
+    }
+    case "triangleBar":
+      return [{ d: triangle, fill: "panel" }, {
+        d: `M${at(size * 1.3 + 3, size * 0.75)} L${
+          at(size * 1.3 + 3, -size * 0.75)
+        }`,
+        fill: "none",
+      }];
+    case "triangleDots":
+    case "triangle4Dots": {
+      const back = size * 1.3 + 3.5;
+      const sides = end.shape === "triangleDots"
+        ? [size * 0.35, -size * 0.35]
+        : [size * 0.6, size * 0.2, -size * 0.2, -size * 0.6];
+      return [{ d: triangle, fill: "panel" }, {
+        d: sides.map((side) => dot(back, side, 1.1)).join(" "),
         fill: "line",
       }];
+    }
   }
+}
+
+/** Both ends of an edge, from its decoration (SysON's style or the type). */
+export function edgeDecorationShapes(
+  decoration: EdgeDecoration,
+  points: readonly DiagramPoint[],
+  size: number,
+): MarkerShape[] {
+  return [
+    ...tipShapes(decoration.source, points, true, size),
+    ...tipShapes(decoration.target, points, false, size),
+  ];
+}
+
+/**
+ * Edge decorations (§2) read from the type when SysON's style is missing:
+ * hollow triangle for specialization, open arrow for dependency-like links
+ * (the line is dashed), filled diamond on the owner (source) side for
+ * composition, small solid arrow for flows.
+ */
+export function edgeMarkerShapes(
+  marker: EdgeMarker,
+  points: readonly DiagramPoint[],
+  size: number,
+): MarkerShape[] {
+  return edgeDecorationShapes(edgeDecoration({}, marker), points, size);
 }
 
 // ── Constant on-screen text below full detail (§3) ─────────────────────────

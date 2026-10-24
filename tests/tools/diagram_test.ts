@@ -1,5 +1,8 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { renderDiagramSvg } from "../../src/tools/diagram.ts";
+import {
+  renderDiagramSvg,
+  snapshotFromDiagram,
+} from "../../src/tools/diagram.ts";
 
 const NODES = [{
   id: "part-1",
@@ -645,4 +648,112 @@ Deno.test("border ports keep accessible identity but omit text duplicated in a s
   assertStringIncludes(port, "<title>input : Signal</title>");
   assertEquals(port.includes("<text"), false);
   assertEquals((svg.match(/>in input : Signal<\/text>/g) ?? []).length, 1);
+});
+
+Deno.test("snapshot leaves out what SysON hides and keeps its notation", () => {
+  const style = (layout: string) => ({
+    __typename: "RectangularNodeStyle",
+    background: "#ffffff",
+    childrenLayoutStrategy: { __typename: layout },
+  });
+  const node = (
+    id: string,
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    id,
+    type: "node:rectangle",
+    targetObjectId: `t-${id}`,
+    state: "Normal",
+    insideLabel: { text: id },
+    outsideLabels: [],
+    style: style("ListLayoutStrategy"),
+    borderNodes: [],
+    childNodes: [],
+    ...extra,
+  });
+  const data = snapshotFromDiagram({
+    targetObjectId: "view",
+    metadata: { label: "States", kind: "Diagram" },
+    nodes: [
+      node("machine", {
+        childNodes: [
+          node("region", {
+            targetObjectId: "t-machine",
+            style: style("FreeFormLayoutStrategy"),
+            childNodes: [
+              node("idle"),
+              node("busy", { state: "Faded" }),
+              node("ghost", {
+                state: "Hidden",
+                childNodes: [node("ghost-row")],
+              }),
+            ],
+          }),
+          node("hidden-list", { state: "Hidden" }),
+        ],
+      }),
+    ],
+    edges: [
+      {
+        id: "go",
+        type: "edge:straight",
+        targetObjectId: "t-go",
+        sourceId: "idle",
+        targetId: "busy",
+        state: "Normal",
+        style: {
+          lineStyle: "Solid",
+          sourceArrow: "None",
+          targetArrow: "InputArrow",
+        },
+        beginLabel: null,
+        centerLabel: { text: "start" },
+        endLabel: null,
+      },
+      {
+        id: "to-ghost",
+        sourceId: "idle",
+        targetId: "ghost",
+        state: "Normal",
+      },
+      { id: "hidden", sourceId: "idle", targetId: "busy", state: "Hidden" },
+    ],
+    layoutData: {
+      nodeLayoutData: [{
+        id: "idle",
+        position: { x: 12, y: 36 },
+        size: { width: 194, height: 60 },
+      }],
+      edgeLayoutData: [{ id: "go", bendingPoints: [{ x: 1, y: 2 }] }],
+    },
+  });
+  assertEquals(data.nodes.map((item) => [item.id, item.kind]), [
+    ["machine", "node"],
+    ["region", "compartment"],
+    ["idle", "node"],
+    ["busy", "node"],
+  ]);
+  assertEquals(data.hidden, { nodes: 3, edges: 2 });
+  assertEquals(data.nodes[1].style?.childrenLayout, "free");
+  assertEquals(data.nodes[0].style?.childrenLayout, "list");
+  assertEquals(data.nodes[3].faded, true);
+  assertEquals(data.nodes[2].faded, undefined);
+  assertEquals([data.nodes[2].x, data.nodes[2].hasLayout], [12, true]);
+  assertEquals(data.edges, [{
+    id: "go",
+    targetObjectId: "t-go",
+    type: "edge:straight",
+    beginLabel: undefined,
+    endLabel: undefined,
+    style: {
+      lineStyle: "Solid",
+      sourceArrow: "None",
+      targetArrow: "InputArrow",
+    },
+    routingPoints: [{ x: 1, y: 2 }],
+    sourceId: "idle",
+    targetId: "busy",
+    label: "start",
+  }]);
+  assertEquals(data.label, "States");
 });

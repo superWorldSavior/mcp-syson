@@ -572,8 +572,15 @@
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
-.syson-edge-line[data-dashed] {
+.syson-edge-line[data-line="dash"] {
   stroke-dasharray: 5 4;
+}
+.syson-edge-line[data-line="dot"] {
+  stroke-dasharray: 1.5 3;
+  stroke-linecap: round;
+}
+.syson-edge-line[data-line="dashDot"] {
+  stroke-dasharray: 6 3 1.5 3;
 }
 .syson-edge-marker {
   stroke: var(--syson-edge);
@@ -624,4 +631,84 @@
 }
 .syson-edge:focus-visible .syson-edge-line {
   stroke-width: 2.5px;
+}
+
+/* ── Containers: frames, free-form regions, nested blocks ─────────────────── */
+.syson-frame {
+  fill: color-mix(in srgb, var(--mcp-view-panel) 55%, transparent);
+  stroke: none;
+}
+.syson-frame-tab,
+.syson-container-head,
+.syson-section-band {
+  fill: var(--mcp-view-panel);
+}
+.syson-frame-tab {
+  stroke: color-mix(in srgb, var(--mcp-view-border-strong) 85%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.syson-region {
+  fill: color-mix(in srgb, var(--mcp-view-subtle) 75%, var(--mcp-view-panel));
+}
+/* The container's border sits above the edges that end on it. */
+.syson-container-outline {
+  fill: none;
+  stroke: color-mix(in srgb, var(--mcp-view-border-strong) 85%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.syson-block-layer[data-frame] .syson-container-outline {
+  stroke: color-mix(in srgb, var(--mcp-view-border-strong) 65%, transparent);
+}
+.syson-block-layer[data-container][data-hover] .syson-container-outline {
+  stroke: color-mix(in srgb, var(--tone) 70%, var(--mcp-view-border-strong));
+}
+.syson-block[data-context-state="selected"] .syson-container-outline,
+.syson-block[data-context-state="adding"] .syson-container-outline {
+  stroke: var(--mcp-view-accent);
+  stroke-width: 2px;
+}
+.syson-block[data-context-state="adding"] .syson-container-outline {
+  stroke-dasharray: 5 3;
+}
+.syson-block[data-context-state="removing"] .syson-container-outline {
+  stroke: var(--mcp-view-quiet);
+  stroke-dasharray: 5 3;
+}
+.syson-port-glyph {
+  fill: none;
+  stroke: var(--mcp-view-panel);
+  stroke-width: 1.4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.syson-control-caption {
+  fill: var(--mcp-view-text-secondary);
+  paint-order: stroke;
+  stroke: var(--mcp-view-panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+/* SysON draws these elements faded. */
+.syson-diagram-svg [data-faded="true"] {
+  opacity: 0.45;
+}
+/* Region titles stay readable where an edge crosses the region top. */
+.syson-region-head .syson-section-title {
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--mcp-view-subtle) 75%, var(--mcp-view-panel));
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.syson-edge-labels {
+  cursor: pointer;
+}
+.syson-edge-labels[data-context-state="selected"] .syson-edge-label rect,
+.syson-edge-labels[data-context-state="adding"] .syson-edge-label rect {
+  stroke: var(--mcp-view-accent);
 }

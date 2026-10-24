@@ -622,6 +622,8 @@ const diagramSnapshotOutputSchema = {
     diagramLabel: { type: "string" },
     nodeCount: { type: "integer", minimum: 0 },
     edgeCount: { type: "integer", minimum: 0 },
+    hiddenNodeCount: { type: "integer", minimum: 0 },
+    hiddenEdgeCount: { type: "integer", minimum: 0 },
     nodes: {
       type: "array",
       items: {
@@ -635,6 +637,7 @@ const diagramSnapshotOutputSchema = {
           parentId: { type: "string" },
           kind: { enum: ["node", "compartment", "port"] },
           hasLayout: { type: "boolean" },
+          faded: { const: true },
           outsideLabels: { type: "array", items: { type: "string" } },
           style: {
             type: "object",
@@ -658,6 +661,7 @@ const diagramSnapshotOutputSchema = {
               borderSize: { type: "number", minimum: 0 },
               borderStyle: { type: "string" },
               imageURL: { type: "string" },
+              childrenLayout: { enum: ["list", "free"] },
             },
             required: ["kind"],
           },
@@ -683,6 +687,17 @@ const diagramSnapshotOutputSchema = {
           type: { type: "string" },
           beginLabel: { type: "string" },
           endLabel: { type: "string" },
+          style: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              lineStyle: { type: "string" },
+              sourceArrow: { type: "string" },
+              targetArrow: { type: "string" },
+            },
+            required: ["lineStyle", "sourceArrow", "targetArrow"],
+          },
+          faded: { const: true },
           routingPoints: {
             type: "array",
             items: {

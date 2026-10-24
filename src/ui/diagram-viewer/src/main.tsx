@@ -60,10 +60,10 @@ import {
   centerDiagramPoint,
   createDiagramPanState,
   type DiagramContextState,
+  diagramHeading,
   diagramNavigationAllowed,
   type DiagramRect,
   diagramRectToCanvas,
-  diagramTitle,
   type DiagramTransform,
   dragCrossedThreshold,
   fitDiagram,
@@ -1117,12 +1117,13 @@ function Visual(
   );
   const target = useTargetLabel(context, data);
   const representation = data.metadata?.description?.label;
-  const title = diagramTitle({
+  const heading = diagramHeading({
     representation,
     name: target.pending && representation ? undefined : data.diagramLabel,
     target: target.label,
     fallback: t("diagramFallback"),
   });
+  const title = heading.title;
   const { open, detail, pathBar, sheet, sheetRef } = useDetail(
     context,
     data,
@@ -1334,6 +1335,7 @@ function Visual(
 
   const header = (
     <ViewerHeader
+      eyebrow={heading.eyebrow}
       title={title}
       actions={
         <ViewMenu
