@@ -1,6 +1,6 @@
 {
   "name": "@casys/mcp-syson",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "nodeModulesDir": "auto",
   "tasks": {
     "serve": "deno run --allow-all server.ts --port=3009",
@@ -45,6 +45,7 @@
   "minimumDependencyAge": {
     "age": "P1D",
     "exclude": [
+      "jsr:@casys/constraint-solver",
       "jsr:@mcpview/server",
       "jsr:@mcpview/contracts",
       "npm:@mcpview/view",
@@ -60,7 +61,7 @@
     "@std/assert": "jsr:@std/assert@1",
     "@mcpview/server": "jsr:@mcpview/server@0.30.0",
     "@mcpview/contracts": "jsr:@mcpview/contracts@0.2.0",
-    "@casys/constraint-solver": "jsr:@casys/constraint-solver@0.1.0",
+    "@casys/constraint-solver": "jsr:@casys/constraint-solver@0.1.1",
     "ajv": "npm:ajv@^8.17.1",
     "hono": "npm:hono@^4",
     "hono/cors": "npm:hono@^4/cors",
