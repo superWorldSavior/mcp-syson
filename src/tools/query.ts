@@ -15,7 +15,13 @@ import type {
 } from "../viewer-data.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { SEARCH_ELEMENTS } from "../api/queries.ts";
-import { evalAql, evalAqlObjects, getChildren, getSelf } from "./aql.ts";
+import {
+  evalAql,
+  evalAqlObjects,
+  type ExprResult,
+  getChildren,
+  getSelf,
+} from "./aql.ts";
 import type { GqlObject, SearchResult } from "../api/types.ts";
 import { normalizeKind } from "../constraints/ast-parser.ts";
 import { readAttributeValue } from "../constraints/resolver.ts";
@@ -556,6 +562,12 @@ export const queryTools: SysonTool[] = [
       const ecId = editing_context_id as string;
       const rootId = root_id as string;
 
+      // SysON answers an empty collection with a result object that carries no
+      // `__typename` (a StringsExpressionResult our GraphQL query does not
+      // select), so `evalAql` returns `{}`: that is zero objects, not an error.
+      const isEmptyCollection = (result: ExprResult): boolean =>
+        (result as { __typename?: string }).__typename === undefined;
+
       // Find all RequirementUsage elements via evaluateExpression
       const reqResult = await evalAql(
         ecId,
@@ -563,21 +575,25 @@ export const queryTools: SysonTool[] = [
         [rootId],
       );
 
+      const noRequirements = (error?: string): RequirementsTraceData => ({
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId },
+        rootId,
+        requirementsCount: 0,
+        traces: [],
+        coverage: {
+          total: 0,
+          satisfied: 0,
+          unsatisfied: 0,
+          percentage: 0,
+        },
+        ...(error ? { error } : {}),
+      });
+      if (isEmptyCollection(reqResult)) return noRequirements();
       if (reqResult.__typename !== "ObjectsExpressionResult") {
-        return {
-          editingContextId: ecId,
-          scope: { kind: "element", editingContextId: ecId, rootId },
-          rootId,
-          requirementsCount: 0,
-          traces: [],
-          coverage: {
-            total: 0,
-            satisfied: 0,
-            unsatisfied: 0,
-            percentage: 0,
-          },
-          error: `Unexpected result type: ${reqResult.__typename}`,
-        };
+        return noRequirements(
+          `Unexpected result type: ${reqResult.__typename}`,
+        );
       }
 
       const requirements = reqResult.objsValue;
@@ -617,6 +633,7 @@ export const queryTools: SysonTool[] = [
         if (result.__typename === "ObjectExpressionResult") {
           return [result.objValue];
         }
+        if (isEmptyCollection(result)) return [];
         if (allowAbsent && result.__typename === "VoidExpressionResult") {
           return [];
         }

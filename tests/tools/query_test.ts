@@ -402,12 +402,15 @@ Deno.test("requirements trace resolves satisfying features, never labels relatio
     const expressions = requests.map((request) =>
       (request.variables as { input: { expression: string } }).input.expression
     );
-    assertEquals(
-      expressions[1],
+    // A non-empty derived `satisfyingFeature` must not trigger the `by`
+    // fallback: the last request is the documentary constraint extraction.
+    assertEquals(expressions, [
+      "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::RequirementUsage) and not e.oclIsKindOf(sysml::SatisfyRequirementUsage))",
       "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::SatisfyRequirementUsage))",
-    );
-    assertEquals(expressions[2], "aql:self.satisfiedRequirement");
-    assertEquals(expressions[3], "aql:self.satisfyingFeature");
+      "aql:self.satisfiedRequirement",
+      "aql:self.satisfyingFeature",
+      "aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::ConstraintUsage))",
+    ]);
   } finally {
     restore();
   }
@@ -549,7 +552,73 @@ Deno.test("requirements trace leaves a satisfy without a `by` feature unresolved
       status: "unresolved",
       error: "Satisfaction relationship has no explicit satisfying feature",
     }]);
+    assertEquals(
+      result.traces[0].error,
+      "Satisfaction relationship has no explicit satisfying feature",
+    );
     assertEquals(result.coverage.satisfied, 0);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("requirements trace reports no resolution error for requirements nothing satisfies", async () => {
+  const objects = (objsValue: unknown[]) =>
+    expressionResponse({ __typename: "ObjectsExpressionResult", objsValue });
+  const requirements = ["req-1", "req-2"].map((id) => ({
+    id,
+    label: `Requirement ${id}`,
+    kind: "sysml::RequirementUsage",
+  }));
+  const restore = mockFetch([
+    objects(requirements),
+    // SysON answers an empty collection without a result type; this last
+    // response repeats for every later query.
+    expressionResponse({}),
+  ]);
+  try {
+    const result = await getHandler("syson_query_requirements_trace")({
+      editing_context_id: "ec",
+      root_id: "root",
+    }) as {
+      traces: Array<Record<string, unknown>>;
+      coverage: Record<string, number>;
+    };
+    assertEquals(result.traces.length, 2);
+    for (const trace of result.traces) {
+      assertEquals(trace.satisfiedBy, []);
+      assertEquals(trace.satisfactionLinks, []);
+      assertEquals(trace.error, undefined);
+      assertEquals("error" in trace, false);
+    }
+    assertEquals(result.coverage, {
+      total: 2,
+      satisfied: 0,
+      unsatisfied: 2,
+      percentage: 0,
+    });
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("requirements trace under a root without requirements is empty, not an error", async () => {
+  // SysON answers an empty collection without a result type.
+  const restore = mockFetch([expressionResponse({})]);
+  try {
+    const result = await getHandler("syson_query_requirements_trace")({
+      editing_context_id: "ec",
+      root_id: "root",
+    }) as Record<string, unknown>;
+    assertEquals(result, {
+      editingContextId: "ec",
+      scope: { kind: "element", editingContextId: "ec", rootId: "root" },
+      rootId: "root",
+      requirementsCount: 0,
+      traces: [],
+      coverage: { total: 0, satisfied: 0, unsatisfied: 0, percentage: 0 },
+    });
+    assertEquals("error" in result, false);
   } finally {
     restore();
   }
