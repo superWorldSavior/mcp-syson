@@ -553,6 +553,7 @@ Deno.test("the view type reads from the ViewUsage's definition", () => {
     "Action Flow View",
   );
   assertEquals(viewTypeLabel("MyViews::ThermalBudget"), "Thermal Budget");
+  assertEquals(viewTypeLabel("Views::'Thermal Budget'"), "Thermal Budget");
   assertEquals(viewTypeLabel("GeneralView"), "General View");
   assertEquals(viewTypeLabel(""), undefined);
   assertEquals(viewTypeLabel(undefined), undefined);

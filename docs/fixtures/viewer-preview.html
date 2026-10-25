@@ -130,26 +130,42 @@
       return undefined;
     }
     /**
-     * Choose a layout through the viewer's "⋯" menu, as a person would, and
-     * fold the overview map a capture would show over the drawing.
+     * Prepare a diagram as a person would: fold the overview map a capture
+     * would show over the drawing, then choose the layout through the
+     * viewer's "⋯" menu. Returns why it could not, if it could not.
      */
-    async function chooseLayout(layout) {
-      const doc = viewer.contentDocument;
-      if (!doc || !await waitFor(() => doc.querySelector(".syson-diagram-svg"))) return;
+    async function prepareDiagram(doc, layout) {
+      if (!await waitFor(() => doc.querySelector(".syson-diagram-svg"))) {
+        return "no client drawing";
+      }
       if (document.documentElement.dataset.capture !== undefined) {
         doc.querySelector('.syson-diagram-control-minimap[aria-pressed="true"]')?.click();
       }
-      if (!layout || layout === "syson") return;
+      if (!layout || layout === "syson") return undefined;
       doc.querySelector(".syson-menu-button")?.click();
       const option = await waitFor(() =>
         doc.querySelector(`[role="menuitemradio"][data-option="${layout}"]`)
       );
-      option?.click();
-      await waitFor(() =>
-        doc.querySelector(`.syson-diagram-svg[data-layout="${layout}"]`)
-      );
+      if (!option) return `no ${layout} layout option`;
+      option.click();
+      if (!await waitFor(() => doc.querySelector(`.syson-diagram-svg[data-layout="${layout}"]`))) {
+        return `${layout} layout not drawn`;
+      }
       doc.activeElement?.blur();
       await pause(300);
+      return undefined;
+    }
+    /** Ready once the viewer shows its title (and a diagram its layout). */
+    async function settle() {
+      const doc = viewer.contentDocument;
+      const titled = doc && await waitFor(() => doc.querySelector(".syson-viewer-title"));
+      const error = !titled
+        ? "no viewer title"
+        : view.bundle === "diagram-viewer"
+        ? await prepareDiagram(doc, view.layout)
+        : undefined;
+      if (error) document.documentElement.dataset.viewerError = error;
+      else document.documentElement.dataset.viewerReady = "true";
     }
     let initialized = false;
     window.addEventListener("message", async (event) => {
@@ -200,8 +216,7 @@
           method: "ui/compose/event",
           params: { action: "viewer.session.apply", data: await session },
         }, "*");
-        if (view.bundle === "diagram-viewer") await chooseLayout(view.layout);
-        document.documentElement.dataset.viewerReady = "true";
+        await settle();
       }
     });
     </script>

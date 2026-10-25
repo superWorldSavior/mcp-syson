@@ -95,12 +95,16 @@ try {
     ],
     "CHROME_BIN",
   );
-  const ffmpeg = await findExecutable([
+  // ffmpeg is optional, unless FFMPEG_BIN names one: then it must exist.
+  const ffmpegSearch = findExecutable([
     Deno.env.get("FFMPEG_BIN"),
     "/opt/homebrew/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
     "/usr/bin/ffmpeg",
-  ]).catch(() => undefined);
+  ]);
+  const ffmpeg = Deno.env.get("FFMPEG_BIN") !== undefined
+    ? await ffmpegSearch
+    : await ffmpegSearch.catch(() => undefined);
   for (const target of TARGETS) {
     const outputPath = `${root}/docs/images/${target.image}.png`;
     // The raw frame lands next to the output so the task only needs docs/images writable.
@@ -174,10 +178,30 @@ async function captureWhenReady(
     stdout: "null",
     stderr: "null",
   }).spawn();
+  let exited = false;
+  const status = browser.status.finally(() => exited = true);
+  const deadline = Date.now() + TOOL_DEADLINE_MS;
+  /** Settle with `promise`, or fail once the capture deadline has passed. */
+  const beforeDeadline = <T>(promise: Promise<T>, what: string) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error(`CAPTURE_TOOL_FAILED ${what} timed out: ${url}`)),
+          Math.max(0, deadline - Date.now()),
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
+  };
+  let socket: WebSocket | undefined;
   try {
-    const deadline = Date.now() + TOOL_DEADLINE_MS;
     let endpoint: string | undefined;
     while (!endpoint && Date.now() < deadline) {
+      if (exited) {
+        throw new Error("CAPTURE_TOOL_FAILED Chrome exited before DevTools");
+      }
       const port = await Deno.readTextFile(`${profile}/DevToolsActivePort`)
         .then((text) => text.split("\n")[0].trim()).catch(() => "");
       if (port) {
@@ -191,27 +215,48 @@ async function captureWhenReady(
     if (!endpoint) {
       throw new Error("CAPTURE_TOOL_FAILED Chrome DevTools unavailable");
     }
-    const socket = new WebSocket(endpoint);
-    await new Promise((resolve, reject) => {
-      socket.onopen = resolve;
-      socket.onerror = reject;
-    });
+    const devtools = new WebSocket(endpoint);
+    socket = devtools;
     let next = 0;
     const pending = new Map<
       number,
-      (result: Record<string, unknown>) => void
+      {
+        resolve: (result: Record<string, unknown>) => void;
+        reject: (error: Error) => void;
+      }
     >();
-    socket.onmessage = (event) => {
+    // A closed or failed socket settles every call still waiting on it.
+    const fail = () => {
+      for (const call of pending.values()) {
+        call.reject(new Error(`CAPTURE_TOOL_FAILED DevTools closed: ${url}`));
+      }
+      pending.clear();
+    };
+    devtools.onclose = fail;
+    devtools.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      pending.get(message.id)?.(message.result ?? {});
+      pending.get(message.id)?.resolve(message.result ?? {});
       pending.delete(message.id);
     };
+    await beforeDeadline(
+      new Promise((resolve, reject) => {
+        devtools.onopen = resolve;
+        devtools.onerror = () => {
+          fail();
+          reject(new Error(`CAPTURE_TOOL_FAILED DevTools socket: ${url}`));
+        };
+      }),
+      "DevTools connection",
+    );
     const send = (method: string, params: Record<string, unknown> = {}) =>
-      new Promise<Record<string, unknown>>((resolve) => {
-        const id = ++next;
-        pending.set(id, resolve);
-        socket.send(JSON.stringify({ id, method, params }));
-      });
+      beforeDeadline(
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const id = ++next;
+          pending.set(id, { resolve, reject });
+          devtools.send(JSON.stringify({ id, method, params }));
+        }),
+        method,
+      );
     await send("Emulation.setDeviceMetricsOverride", {
       width: window.width,
       height: window.height,
@@ -219,16 +264,22 @@ async function captureWhenReady(
       mobile: false,
     });
     await send("Page.navigate", { url });
-    let ready = false;
-    while (!ready && Date.now() < deadline) {
+    // The harness marks the page ready, or says why it is not.
+    let state = "";
+    while (!state && Date.now() < deadline) {
       const { result } = await send("Runtime.evaluate", {
-        expression: "document.documentElement.dataset.viewerReady === 'true'",
+        expression:
+          "document.documentElement.dataset.viewerError ? 'error:' + document.documentElement.dataset.viewerError : document.documentElement.dataset.viewerReady === 'true' ? 'ready' : ''",
         returnByValue: true,
-      }) as { result?: { value?: boolean } };
-      ready = result?.value === true;
-      if (!ready) await new Promise((resolve) => setTimeout(resolve, 100));
+      }) as { result?: { value?: string } };
+      state = result?.value ?? "";
+      if (!state) await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    if (!ready) throw new Error(`CAPTURE_TOOL_FAILED viewer not ready: ${url}`);
+    if (state !== "ready") {
+      throw new Error(
+        `CAPTURE_TOOL_FAILED viewer ${state || "not ready"}: ${url}`,
+      );
+    }
     // Let the last frame (fit, labels) settle before the capture.
     await new Promise((resolve) => setTimeout(resolve, 600));
     const { data } = await send("Page.captureScreenshot", {
@@ -239,13 +290,31 @@ async function captureWhenReady(
       outputPath,
       Uint8Array.from(atob(data), (char) => char.charCodeAt(0)),
     );
-    socket.close();
   } finally {
+    socket?.close();
+    // Ask Chrome to quit, then insist; its helpers release the profile last.
     try {
-      browser.kill();
+      browser.kill("SIGTERM");
     } catch { /* already gone */ }
-    await browser.status;
-    await Deno.remove(profile, { recursive: true }).catch(() => {});
+    const quit = await Promise.race([
+      status.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+    ]);
+    if (!quit) {
+      try {
+        browser.kill("SIGKILL");
+      } catch { /* already gone */ }
+      await status;
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await Deno.remove(profile, { recursive: true });
+        break;
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
   }
 }
 

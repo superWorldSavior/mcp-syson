@@ -15,14 +15,16 @@ function mockSyson(responses: unknown[]) {
   const original = globalThis.fetch;
   const operations: string[] = [];
   let index = 0;
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = (_input, init) => {
     const body = JSON.parse(String(init?.body ?? "{}"));
     operations.push(/(query|mutation)\s+(\w+)/.exec(body.query)?.[2] ?? "?");
     const data = responses[index++] ?? responses.at(-1);
-    return new Response(JSON.stringify({ data }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return Promise.resolve(
+      new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
   };
   setSysonClient(new SysonGraphQLClient({ baseUrl: "http://mock:8080" }));
   return {
@@ -876,6 +878,104 @@ Deno.test("only a typed ViewUsage has a view definition", async () => {
     assertEquals(await readViewDefinition("ec", "package"), undefined);
     assertEquals(await readViewDefinition("ec", undefined), undefined);
     assertEquals(syson.operations.length, 2);
+  } finally {
+    syson.restore();
+  }
+});
+
+Deno.test("a view added meanwhile does not hide the one the creation made", async () => {
+  const syson = mockSyson([
+    {
+      viewer: {
+        editingContext: {
+          representationDescriptions: {
+            edges: [{
+              node: { id: "d-state", label: "State Transition View" },
+            }],
+          },
+        },
+      },
+    },
+    viewUsages(),
+    {
+      createRepresentation: {
+        __typename: "CreateRepresentationSuccessPayload",
+        id: "m",
+        representation: { id: "diagram-2", label: "Modes", kind: "Diagram" },
+      },
+    },
+    evaluated({
+      __typename: "ObjectsExpressionResult",
+      objsValue: [
+        { id: "someone-else", kind: "sysml::ViewUsage", label: "Other" },
+        { id: "ours", kind: "sysml::ViewUsage", label: "Modes" },
+      ],
+    }),
+    evaluated({
+      __typename: "StringExpressionResult",
+      strValue: "StandardViewDefinitions::StateTransitionView",
+    }),
+  ]);
+  try {
+    const create = diagramTools.find((tool) =>
+      tool.name === "syson_diagram_create"
+    )!;
+    const result = await create.handler({
+      editing_context_id: "ec",
+      element_id: "modes",
+      name: "Modes",
+      description_label: "State Transition",
+    }) as Record<string, unknown>;
+    assertEquals(result.viewUsageId, "ours");
+    assertEquals(
+      result.viewDefinition,
+      "StandardViewDefinitions::StateTransitionView",
+    );
+  } finally {
+    syson.restore();
+  }
+});
+
+Deno.test("a failed listing after the creation still reports the diagram", async () => {
+  const syson = mockSyson([
+    {
+      viewer: {
+        editingContext: {
+          representationDescriptions: {
+            edges: [{ node: { id: "d-flow", label: "Action Flow View" } }],
+          },
+        },
+      },
+    },
+    viewUsages(),
+    {
+      createRepresentation: {
+        __typename: "CreateRepresentationSuccessPayload",
+        id: "m",
+        representation: { id: "diagram-3", label: "Flow", kind: "Diagram" },
+      },
+    },
+    {
+      evaluateExpression: {
+        __typename: "ErrorPayload",
+        id: "e",
+        message: "AQL unavailable",
+      },
+    },
+  ]);
+  try {
+    const create = diagramTools.find((tool) =>
+      tool.name === "syson_diagram_create"
+    )!;
+    assertEquals(
+      await create.handler({
+        editing_context_id: "ec",
+        element_id: "flow",
+        name: "Flow",
+        description_label: "Action Flow",
+      }),
+      { id: "diagram-3", label: "Flow", kind: "Diagram" },
+    );
   } finally {
     syson.restore();
   }

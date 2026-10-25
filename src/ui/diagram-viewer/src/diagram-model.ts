@@ -415,7 +415,8 @@ export function plainElementName(label: string | undefined): string {
 export function viewTypeLabel(
   definition: string | undefined,
 ): string | undefined {
-  const name = definition?.split("::").at(-1)?.trim();
+  // SysML quotes unrestricted names: 'Thermal Budget'.
+  const name = definition?.split("::").at(-1)?.trim().replace(/^'(.*)'$/, "$1");
   return name ? name.replace(/([a-z0-9])([A-Z])/g, "$1 $2") : undefined;
 }
 

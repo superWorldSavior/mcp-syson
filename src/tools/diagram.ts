@@ -763,11 +763,18 @@ export const diagramTools: SysonTool[] = [
       }
 
       // The ViewUsage SysON adds to the element tells which view was created.
+      // Never throws: after the creation, a failed listing must not turn a
+      // created diagram into an error the caller would retry.
       const viewUsages = () =>
         evalAqlObjects(ecId, VIEW_USAGES, elementId).then(
-          (items) => new Set(items.map((item) => item.id)),
-          () => undefined,
-        );
+          (items) =>
+            new Map(
+              items.filter((item) => item?.id).map((item) => [
+                item.id,
+                item.label,
+              ]),
+            ),
+        ).catch(() => undefined);
       const before = await viewUsages();
 
       // Create the diagram
@@ -794,9 +801,16 @@ export const diagramTools: SysonTool[] = [
 
       const after = await viewUsages();
       const added = before && after
-        ? [...after].filter((id) => !before.has(id))
+        ? [...after].filter(([id]) => !before.has(id))
         : [];
-      const viewUsageId = added.length === 1 ? added[0] : undefined;
+      // SysON names the ViewUsage after the representation; the name breaks
+      // a tie when someone else added a view to the element meanwhile.
+      const named = added.filter(([, label]) => label === representation.label);
+      const viewUsageId = added.length === 1
+        ? added[0][0]
+        : named.length === 1
+        ? named[0][0]
+        : undefined;
       const viewDefinition = await readViewDefinition(ecId, viewUsageId)
         .catch(() => undefined);
 
