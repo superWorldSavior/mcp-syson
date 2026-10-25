@@ -66,7 +66,19 @@ async function buildAstTree(
     } catch { /* no operator property on this node */ }
   }
 
-  if (shortKind.includes("Literal")) {
+  if (shortKind.includes("LiteralRational")) {
+    // SysON's expression results have no real-number type: `self.value` on a
+    // LiteralRational fails in GraphQL, so the decimal is read as its text.
+    try {
+      const val = await evalAql(ecId, "aql:self.value.toString()", [
+        elementId,
+      ]);
+      const num = val.__typename === "StringExpressionResult"
+        ? Number(val.strValue)
+        : NaN;
+      if (Number.isFinite(num)) props = { ...props, value: num };
+    } catch { /* unreadable: the parser reports the literal */ }
+  } else if (shortKind.includes("Literal")) {
     try {
       const val = await evalAql(ecId, "aql:self.value", [elementId]);
       if (val.__typename === "IntExpressionResult") {

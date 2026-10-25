@@ -155,6 +155,98 @@ Deno.test("syson_constraint_solve - element without constraints is trivially sat
   }
 });
 
+// ── syson_constraint_extract (mocked SysON) ─────────────────────────────────
+
+/**
+ * Answer each AQL evaluation from `answers`, keyed by `<self id>|<expression>`.
+ * A key mapped to `null` fails in GraphQL, the way SysON fails on a value
+ * its expression results cannot carry.
+ */
+function mockAql(answers: Record<string, unknown>): () => void {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (_url, init) => {
+    const { input } = JSON.parse(String(init?.body)).variables;
+    const key = `${input.selectedObjectIds.join(",")}|${input.expression}`;
+    if (!(key in answers)) throw new Error(`Unexpected AQL ${key}`);
+    const answer = answers[key];
+    const body = answer === null
+      ? {
+        data: null,
+        errors: [{
+          message:
+            "The field at path '/evaluateExpression/result/objValue/id' was declared as a non null type, but the code involved in retrieving data has wrongly returned a null value.",
+        }],
+      }
+      : {
+        data: {
+          evaluateExpression: {
+            __typename: "EvaluateExpressionSuccessPayload",
+            result: answer,
+          },
+        },
+      };
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+  setSysonClient(new SysonGraphQLClient({ baseUrl: "http://mock-syson:8180" }));
+  return () => globalThis.fetch = originalFetch;
+}
+
+const element = (id: string, entity: string, label = entity) => ({
+  id,
+  kind: `siriusComponents://semantic?domain=sysml&entity=${entity}`,
+  label,
+});
+const objects = (...objsValue: unknown[]) => ({
+  __typename: "ObjectsExpressionResult",
+  objsValue,
+});
+const text = (strValue: string) => ({
+  __typename: "StringExpressionResult",
+  strValue,
+});
+
+Deno.test("syson_constraint_extract - reads a decimal literal SysON cannot return as a number", async () => {
+  // `totalMass <= 2.5`: SysON's expression results have no real-number type,
+  // so `self.value` on the LiteralRational fails in GraphQL; its text works.
+  const restore = mockAql({
+    "part|aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::ConstraintUsage))":
+      objects(element("c", "ConstraintUsage", "massMargin")),
+    "c|aql:self.ownedElement": objects(element("op", "OperatorExpression")),
+    "op|aql:self.ownedElement": objects(
+      element("ref", "FeatureReferenceExpression"),
+      element("lit", "LiteralRational"),
+    ),
+    "op|aql:self.operator": text("<="),
+    "ref|aql:self.ownedElement": objects(),
+    "ref|aql:self.referent.shortName": text(""),
+    "ref|aql:self.referent.declaredName": text("totalMass"),
+    "lit|aql:self.ownedElement": objects(),
+    "lit|aql:self.value": null,
+    "lit|aql:self.value.toString()": text("2.5"),
+  });
+  try {
+    const result = await getHandler("syson_constraint_extract")({
+      editing_context_id: "ec-1",
+      element_id: "part",
+    }) as { constraints: Constraint[]; errors?: unknown[] };
+
+    assertEquals(result.errors ?? [], []);
+    assertEquals(result.constraints[0].expression, {
+      kind: "binary",
+      op: "<=",
+      left: { kind: "ref", featurePath: ["totalMass"] },
+      right: { kind: "literal", value: 2.5 },
+    });
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("syson_constraint_solve - throws without constraints or coordinates", async () => {
   await assertRejects(
     async () => await getHandler("syson_constraint_solve")({}),
