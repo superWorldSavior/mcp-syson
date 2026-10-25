@@ -18,6 +18,15 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 - `deno task docs:viewer-screenshot` crops each image to the viewer and accepts
   view names to capture only those.
 
+### Fixed
+
+- Constraint extraction reads decimal literals: `totalMass <= 2.5` or
+  `thrust / (totalMass * 9.81) >= 2` failed with "Cannot parse literal value
+  from 'LiteralRational'", because SysON's expression results have no
+  real-number type and `self.value` fails in GraphQL on a `LiteralRational`. Its
+  value is now read as text. Validation, solving, requirement limits and the
+  requirements trace's authored constraints all go through this extraction.
+
 ## [0.9.1] - 2026-10-25
 
 ### Added
