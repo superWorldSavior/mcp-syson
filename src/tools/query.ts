@@ -15,7 +15,13 @@ import type {
 } from "../viewer-data.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { SEARCH_ELEMENTS } from "../api/queries.ts";
-import { evalAql, getChildren, getSelf } from "./aql.ts";
+import {
+  evalAql,
+  evalAqlObjects,
+  type ExprResult,
+  getChildren,
+  getSelf,
+} from "./aql.ts";
 import type { GqlObject, SearchResult } from "../api/types.ts";
 import { normalizeKind } from "../constraints/ast-parser.ts";
 import { readAttributeValue } from "../constraints/resolver.ts";
@@ -556,6 +562,12 @@ export const queryTools: SysonTool[] = [
       const ecId = editing_context_id as string;
       const rootId = root_id as string;
 
+      // SysON answers an empty collection with a result object that carries no
+      // `__typename` (a StringsExpressionResult our GraphQL query does not
+      // select), so `evalAql` returns `{}`: that is zero objects, not an error.
+      const isEmptyCollection = (result: ExprResult): boolean =>
+        (result as { __typename?: string }).__typename === undefined;
+
       // Find all RequirementUsage elements via evaluateExpression
       const reqResult = await evalAql(
         ecId,
@@ -563,25 +575,33 @@ export const queryTools: SysonTool[] = [
         [rootId],
       );
 
+      const noRequirements = (error?: string): RequirementsTraceData => ({
+        editingContextId: ecId,
+        scope: { kind: "element", editingContextId: ecId, rootId },
+        rootId,
+        requirementsCount: 0,
+        traces: [],
+        coverage: {
+          total: 0,
+          satisfied: 0,
+          unsatisfied: 0,
+          percentage: 0,
+        },
+        ...(error ? { error } : {}),
+      });
+      if (isEmptyCollection(reqResult)) return noRequirements();
       if (reqResult.__typename !== "ObjectsExpressionResult") {
-        return {
-          editingContextId: ecId,
-          scope: { kind: "element", editingContextId: ecId, rootId },
-          rootId,
-          requirementsCount: 0,
-          traces: [],
-          coverage: {
-            total: 0,
-            satisfied: 0,
-            unsatisfied: 0,
-            percentage: 0,
-          },
-          error: `Unexpected result type: ${reqResult.__typename}`,
-        };
+        return noRequirements(
+          `Unexpected result type: ${reqResult.__typename}`,
+        );
       }
 
       const requirements = reqResult.objsValue;
 
+      // `satisfy R by f;` records f as the value of the relationship's subject
+      // parameter, and SysON v2026.7.0 derives no satisfyingFeature from it.
+      const subjectValue =
+        "aql:self.subjectParameter.ownedRelationship->filter(sysml::FeatureValue).value->filter(sysml::FeatureReferenceExpression).referent";
       // SysON v2026.7.0: SatisfyRequirementUsage is a relationship usage,
       // not its satisfying part. Its derived accessors are implemented here:
       // https://github.com/eclipse-syson/syson/blob/v2026.7.0/backend/metamodel/syson-sysml-metamodel/src/main/java/org/eclipse/syson/sysml/impl/SatisfyRequirementUsageImpl.java
@@ -601,6 +621,25 @@ export const queryTools: SysonTool[] = [
         label,
         kind,
       });
+      /**
+       * A `by` target. A chain (`by rover.pack.cell`) is an anonymous Feature:
+       * it is reported as the chain's last feature, labelled with the path.
+       */
+      const byTarget = async (referent: GqlObject): Promise<Identity> => {
+        const chain = await evalAqlObjects(
+          ecId,
+          "aql:self.chainingFeature",
+          referent.id,
+        );
+        const last = chain.at(-1);
+        return last
+          ? {
+            id: last.id,
+            kind: last.kind,
+            label: chain.map((feature) => feature.label).join("."),
+          }
+          : identity(referent);
+      };
       const readObjects = async (
         id: string,
         expression: string,
@@ -613,6 +652,7 @@ export const queryTools: SysonTool[] = [
         if (result.__typename === "ObjectExpressionResult") {
           return [result.objValue];
         }
+        if (isEmptyCollection(result)) return [];
         if (allowAbsent && result.__typename === "VoidExpressionResult") {
           return [];
         }
@@ -644,9 +684,19 @@ export const queryTools: SysonTool[] = [
           ) continue;
           let link: SatisfactionLink;
           try {
-            const targets =
-              (await readObjects(relationship.id, "aql:self.satisfyingFeature"))
-                .map(identity);
+            // The derived accessor first, then the explicit `by` binding it
+            // misses; without either, no target is inferred.
+            const derived = await readObjects(
+              relationship.id,
+              "aql:self.satisfyingFeature",
+              true,
+            );
+            const targets = derived.length > 0
+              ? derived.map(identity)
+              : await Promise.all(
+                (await evalAqlObjects(ecId, subjectValue, relationship.id))
+                  .map(byTarget),
+              );
             link = targets.length
               ? {
                 relationship: identity(relationship),
