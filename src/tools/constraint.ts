@@ -73,9 +73,11 @@ async function buildAstTree(
       const val = await evalAql(ecId, "aql:self.value.toString()", [
         elementId,
       ]);
-      const num = val.__typename === "StringExpressionResult"
-        ? Number(val.strValue)
-        : NaN;
+      // Number, not parseFloat ("1/3" is not 1), and blank text is not 0.
+      const text = val.__typename === "StringExpressionResult"
+        ? val.strValue.trim()
+        : "";
+      const num = text === "" ? NaN : Number(text);
       if (Number.isFinite(num)) props = { ...props, value: num };
     } catch { /* unreadable: the parser reports the literal */ }
   } else if (shortKind.includes("Literal")) {

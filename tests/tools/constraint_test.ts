@@ -210,9 +210,12 @@ const text = (strValue: string) => ({
   strValue,
 });
 
-Deno.test("syson_constraint_extract - reads a decimal literal SysON cannot return as a number", async () => {
-  // `totalMass <= 2.5`: SysON's expression results have no real-number type,
-  // so `self.value` on the LiteralRational fails in GraphQL; its text works.
+/**
+ * Extract `totalMass <= <literal>` where the literal is a LiteralRational
+ * whose `self.value.toString()` is `literalText`. As on SysON, `self.value`
+ * itself fails in GraphQL: expression results have no real-number type.
+ */
+async function extractWithRational(literalText: string) {
   const restore = mockAql({
     "part|aql:self.eAllContents()->select(e | e.oclIsKindOf(sysml::ConstraintUsage))":
       objects(element("c", "ConstraintUsage", "massMargin")),
@@ -227,23 +230,41 @@ Deno.test("syson_constraint_extract - reads a decimal literal SysON cannot retur
     "ref|aql:self.referent.declaredName": text("totalMass"),
     "lit|aql:self.ownedElement": objects(),
     "lit|aql:self.value": null,
-    "lit|aql:self.value.toString()": text("2.5"),
+    "lit|aql:self.value.toString()": text(literalText),
   });
   try {
-    const result = await getHandler("syson_constraint_extract")({
+    return await getHandler("syson_constraint_extract")({
       editing_context_id: "ec-1",
       element_id: "part",
-    }) as { constraints: Constraint[]; errors?: unknown[] };
+    }) as { constraints: Constraint[]; errors?: Array<{ error: string }> };
+  } finally {
+    restore();
+  }
+}
 
-    assertEquals(result.errors ?? [], []);
+Deno.test("syson_constraint_extract - reads a decimal literal SysON cannot return as a number", async () => {
+  for (
+    const [literalText, value] of [["2.5", 2.5], ["5.5E7", 55_000_000]] as const
+  ) {
+    const result = await extractWithRational(literalText);
+    assertEquals(result.errors ?? [], [], literalText);
     assertEquals(result.constraints[0].expression, {
       kind: "binary",
       op: "<=",
       left: { kind: "ref", featurePath: ["totalMass"] },
-      right: { kind: "literal", value: 2.5 },
+      right: { kind: "literal", value },
     });
-  } finally {
-    restore();
+  }
+});
+
+Deno.test("syson_constraint_extract - an unreadable decimal is reported, never read as 0", async () => {
+  for (const literalText of ["", "  ", "NaN", "Infinity"]) {
+    const result = await extractWithRational(literalText);
+    assertEquals(result.constraints, [], JSON.stringify(literalText));
+    assertEquals(
+      result.errors?.[0].error,
+      "[lib/syson] Cannot parse literal value from 'LiteralRational'",
+    );
   }
 });
 
