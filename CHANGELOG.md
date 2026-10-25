@@ -4,6 +4,20 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- README: the viewers section is a gallery with one capture per viewer (model
+  explorer, query results, value change, requirements, requirements trace,
+  validation, and two diagram views), each in light and dark.
+- The documentation harness delivers a recorded tool result as a host does and
+  answers the viewer's own calls from recordings, so a capture shows what a host
+  shows (the value change names its attribute). It is ready once those calls are
+  answered, and fails the capture instead of drawing a wrong one when a
+  recording cannot be read or a view name is unknown. The new recordings are in
+  `tests/fixtures/live-audit`.
+- `deno task docs:viewer-screenshot` crops each image to the viewer and accepts
+  view names to capture only those.
+
 ### Fixed
 
 - Constraint extraction reads decimal literals: `totalMass <= 2.5` or

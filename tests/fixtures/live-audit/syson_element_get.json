@@ -1,0 +1,23 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Read siriusComponents://semantic?domain=sysml&entity=AttributeUsage \"width\"."
+    }
+  ],
+  "structuredContent": {
+    "id": "dfc0e638-6989-41cb-8cb9-bfd973ae09bc",
+    "kind": "siriusComponents://semantic?domain=sysml&entity=AttributeUsage",
+    "label": "width",
+    "iconURLs": [
+      "/api/images/icons/full/obj16/AttributeUsage.svg"
+    ]
+  },
+  "resultType": "complete",
+  "_meta": {
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.9.1"
+    }
+  }
+}

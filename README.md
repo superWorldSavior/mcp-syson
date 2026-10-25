@@ -17,47 +17,85 @@ constraint and value operations, and shows the results in interactive MCP Apps.
 ## Viewers
 
 Every result comes with a compact MCP App that does one job, so a host can
-compose them without embedding a modelling tool.
+compose them without embedding a modelling tool. The diagram viewer draws
+SysON's General, Interconnection, Action Flow and State Transition views with
+SysON's notation, in SysON's layout or an automatic one.
 
 <table>
   <tr>
-    <td width="50%">
+    <td width="50%" align="center" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-state-transition-dark.png">
-  <img src="docs/images/mcp-syson-state-transition.png" alt="The FlightModes state machine: entry actions, nested states, initial states and transitions with triggers and guards">
-</picture>
+  <img src="docs/images/mcp-syson-state-transition.png" width="100%" alt="The FlightModes state machine: entry actions, nested states, initial states and transitions with triggers and guards">
+</picture><br>
+      <sub><b>diagram-viewer</b> — a State Transition view: nested states, entry actions, triggers and guards</sub>
     </td>
-    <td width="50%">
+    <td width="50%" align="center" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-interconnection-dark.png">
-  <img src="docs/images/mcp-syson-interconnection.png" alt="The Drone interconnection view: a view frame, the Drone part with its parts, ports and connections, and an item flow">
-</picture>
+  <img src="docs/images/mcp-syson-interconnection.png" width="100%" alt="The Drone interconnection view: a view frame, the Drone part with its parts, ports and connections, and an item flow">
+</picture><br>
+      <sub><b>diagram-viewer</b> — an Interconnection view: parts, ports, connections and item flows</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-model-explorer-dark.png">
+  <img src="docs/images/mcp-syson-model-explorer.png" width="100%" alt="The model explorer at the root of the Batmobile model: 39 elements, counts by kind, and the first part and item definitions">
+</picture><br>
+      <sub><b>model-explorer-viewer</b> — the model as a tree, loaded branch by branch, with filters by kind</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-query-results-dark.png">
+  <img src="docs/images/mcp-syson-query-results.png" width="100%" alt="The part and interface usages of the Batmobile part definition returned by an AQL query, sorted by label">
+</picture><br>
+      <sub><b>query-results-viewer</b> — AQL and search results, filtered and sorted</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-requirements-dark.png">
+  <img src="docs/images/mcp-syson-requirements.png" width="100%" alt="The StandBackrest authored requirements: maximum displacement at most 1 mm and maximum von Mises stress at most 55,000,000 Pa">
+</picture><br>
+      <sub><b>requirements-viewer</b> — authored requirements and their limits</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-requirements-trace-dark.png">
+  <img src="docs/images/mcp-syson-requirements-trace.png" width="100%" alt="The Batmobile requirements trace: seven requirements with their satisfaction gaps and unknown verification">
+</picture><br>
+      <sub><b>requirements-trace-viewer</b> — satisfaction and verification coverage, gaps included</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-validation-dark.png">
+  <img src="docs/images/mcp-syson-validation.png" width="100%" alt="The DroneBudget constraints validated against the model's values: three pass and one fails, each with its margin">
+</picture><br>
+      <sub><b>validation-viewer</b> — constraints evaluated against the model's values, with margins</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-value-change-dark.png">
+  <img src="docs/images/mcp-syson-value-change.png" width="100%" alt="The wheel width attribute changed from 26 to 28, with the read-back matching the requested value">
+</picture><br>
+      <sub><b>value-change-viewer</b> — a value before and after its change, with its read-back</sub>
     </td>
   </tr>
 </table>
-
-- **Diagram**: SysON's General, Interconnection, Action Flow and State
-  Transition views with SysON's notation, in SysON's layout or an automatic one.
-- **Model explorer**: the model as a tree, loaded branch by branch.
-- **Requirements** and **requirements trace**: authored limits, and satisfaction
-  coverage with its gaps.
-- **Validation**: constraint diagnostics by severity.
-- **Query results** and **value change**: query rows, and a value before and
-  after its change.
 
 Click an element to add it to the AI context of the next turn; double-click or
 press Enter to open it. See
 [Browse model elements and diagram views](docs/how-to/browse-model-views.md).
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-requirements-dark.png">
-  <img src="docs/images/mcp-syson-requirements.png" width="600" alt="The StandBackrest authored requirements: maximum displacement at most 1 mm and maximum von Mises stress at most 55,000,000 Pa">
-</picture>
-
-The images are rendered from the recorded fixtures in `docs/fixtures` by
-`deno task docs:viewer-screenshot`. The same operations work in clients without
-MCP Apps, and no tool calls a language model: interpretation, approval and
-orchestration stay with the calling client.
+The images are rendered by `deno task docs:viewer-screenshot` from recorded
+sessions and tool results (`docs/fixtures`, `tests/fixtures/live-audit`). The
+same operations work in clients without MCP Apps, and no tool calls a language
+model: interpretation, approval and orchestration stay with the calling client.
 
 ## Quick start
 

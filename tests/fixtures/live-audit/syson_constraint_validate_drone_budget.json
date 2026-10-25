@@ -1,0 +1,102 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Validated \"DroneBudget\": 3 pass, 1 fail, 0 error, 0 unresolved."
+    }
+  ],
+  "structuredContent": {
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "elementId": "316c4e1e-a117-44ab-99da-f0c6069983df",
+    "elementName": "DroneBudget",
+    "scope": {
+      "kind": "element",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+      "rootId": "316c4e1e-a117-44ab-99da-f0c6069983df"
+    },
+    "constraints": [
+      {
+        "constraintId": "8a99f6b4-71f7-48ee-8b29-60c076424cfd",
+        "constraintName": "massWithinTakeoffLimit",
+        "expression": "totalMass ≤ maxTakeoffMass",
+        "status": "pass",
+        "computedValue": 2.4,
+        "threshold": 2.5,
+        "margin": 0.10000000000000009,
+        "marginPercent": 4
+      },
+      {
+        "constraintId": "516d4b21-9e36-443f-bb10-f303201593a6",
+        "constraintName": "enduranceMet",
+        "expression": "flightTime ≥ requiredFlightTime",
+        "status": "fail",
+        "computedValue": 22,
+        "threshold": 25,
+        "margin": -3,
+        "marginPercent": -12
+      },
+      {
+        "constraintId": "efe9a933-d0d2-46aa-a766-fa4b822d0b58",
+        "constraintName": "batterySized",
+        "expression": "batteryCapacity ≥ 4500",
+        "status": "pass",
+        "computedValue": 5000,
+        "threshold": 4500,
+        "margin": 500,
+        "marginPercent": 11.11
+      },
+      {
+        "constraintId": "2ffea909-b924-4d95-b607-ffa387cca4f2",
+        "constraintName": "thrustToWeight",
+        "expression": "thrust ≥ 20 * totalMass",
+        "status": "pass",
+        "computedValue": 58,
+        "threshold": 48,
+        "margin": 10,
+        "marginPercent": 20.83
+      }
+    ],
+    "diagnostics": [],
+    "summary": {
+      "total": 4,
+      "pass": 3,
+      "fail": 1,
+      "error": 0,
+      "unresolved": 0
+    },
+    "resolvedValues": {
+      "totalMass": {
+        "value": 2.4
+      },
+      "maxTakeoffMass": {
+        "value": 2.5
+      },
+      "flightTime": {
+        "value": 22
+      },
+      "requiredFlightTime": {
+        "value": 25
+      },
+      "batteryCapacity": {
+        "value": 5000
+      },
+      "thrust": {
+        "value": 58
+      }
+    },
+    "validatedAt": "2026-10-25T02:32:30.649Z"
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/validation-viewer",
+      "emits": [
+        "syson.constraint.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.9.1"
+    }
+  },
+  "resultType": "complete"
+}
