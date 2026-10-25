@@ -621,6 +621,25 @@ export const queryTools: SysonTool[] = [
         label,
         kind,
       });
+      /**
+       * A `by` target. A chain (`by rover.pack.cell`) is an anonymous Feature:
+       * it is reported as the chain's last feature, labelled with the path.
+       */
+      const byTarget = async (referent: GqlObject): Promise<Identity> => {
+        const chain = await evalAqlObjects(
+          ecId,
+          "aql:self.chainingFeature",
+          referent.id,
+        );
+        const last = chain.at(-1);
+        return last
+          ? {
+            id: last.id,
+            kind: last.kind,
+            label: chain.map((feature) => feature.label).join("."),
+          }
+          : identity(referent);
+      };
       const readObjects = async (
         id: string,
         expression: string,
@@ -672,12 +691,12 @@ export const queryTools: SysonTool[] = [
               "aql:self.satisfyingFeature",
               true,
             );
-            const targets =
-              (derived.length > 0 ? derived : await evalAqlObjects(
-                ecId,
-                subjectValue,
-                relationship.id,
-              )).map(identity);
+            const targets = derived.length > 0
+              ? derived.map(identity)
+              : await Promise.all(
+                (await evalAqlObjects(ecId, subjectValue, relationship.id))
+                  .map(byTarget),
+              );
             link = targets.length
               ? {
                 relationship: identity(relationship),

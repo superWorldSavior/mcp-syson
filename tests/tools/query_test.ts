@@ -465,6 +465,65 @@ Deno.test("requirements trace retains an unresolved satisfaction relationship wi
 const SUBJECT_VALUE =
   "aql:self.subjectParameter.ownedRelationship->filter(sysml::FeatureValue).value->filter(sysml::FeatureReferenceExpression).referent";
 
+Deno.test("requirements trace names a feature-chain `by` by its path, on the chain's last feature", async () => {
+  // `satisfy cellLife by rover.pack.cell;`: the referent is an anonymous
+  // Feature whose chainingFeature is [rover, pack, cell].
+  const requirement = {
+    id: "req",
+    label: "cellLife",
+    kind: "sysml::RequirementUsage",
+  };
+  const relationship = {
+    id: "satisfy",
+    label: "SatisfyRequirementUsage",
+    kind: "sysml::SatisfyRequirementUsage",
+  };
+  const chain = { id: "chain", label: "Feature", kind: "sysml::Feature" };
+  const rover = { id: "rover", label: "rover", kind: "sysml::PartUsage" };
+  const pack = { id: "pack", label: "pack", kind: "sysml::PartUsage" };
+  const cell = { id: "cell", label: "cell", kind: "sysml::PartUsage" };
+  const objects = (objsValue: unknown[]) =>
+    expressionResponse({ __typename: "ObjectsExpressionResult", objsValue });
+  const requests: Array<Record<string, unknown>> = [];
+  const restore = mockFetch([
+    objects([requirement]),
+    objects([relationship]),
+    objects([requirement]),
+    expressionResponse({ __typename: "VoidExpressionResult" }),
+    objects([chain]),
+    objects([rover, pack, cell]),
+    objects([]),
+  ], requests);
+  try {
+    const result = await getHandler("syson_query_requirements_trace")({
+      editing_context_id: "ec",
+      root_id: "root",
+    }) as {
+      traces: Array<Record<string, unknown>>;
+      coverage: { satisfied: number };
+    };
+    const target = {
+      id: "cell",
+      kind: "sysml::PartUsage",
+      label: "rover.pack.cell",
+    };
+    assertEquals(result.traces[0].satisfiedBy, [target]);
+    assertEquals(result.traces[0].satisfactionLinks, [{
+      relationship,
+      targets: [target],
+      status: "resolved",
+    }]);
+    assertEquals(result.coverage.satisfied, 1);
+    const expressions = requests.map((request) =>
+      (request.variables as { input: { expression: string } }).input.expression
+    );
+    assertEquals(expressions[4], SUBJECT_VALUE);
+    assertEquals(expressions[5], "aql:self.chainingFeature");
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("requirements trace reads the `by` feature SysON leaves out of satisfyingFeature", async () => {
   const requirement = {
     id: "req",

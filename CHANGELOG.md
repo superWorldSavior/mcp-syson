@@ -10,14 +10,15 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
   `satisfy massBudget by budget;` was reported as an unresolved link
   ("Unexpected relationship result: VoidExpressionResult"), since SysON
   v2026.7.0 derives no `satisfyingFeature` from it. The trace now reads the
-  explicit `by` feature named directly (e.g. `by budget`), the value of the
-  relationship's subject parameter, when the derived accessor is empty. A
-  satisfy without a `by` feature is reported unresolved as "no explicit
-  satisfying feature" (instead of the old "Unexpected relationship result"
-  text), with no inferred target. A root with requirements but no satisfy
-  relationship, or with no requirements, no longer reports a resolution error:
-  SysON answers an empty collection with no result type, which the trace now
-  reads as zero objects.
+  explicit `by` feature (e.g. `by budget`), the value of the relationship's
+  subject parameter, when the derived accessor is empty. A feature chain
+  (`by rover.pack.cell`) is reported as its last feature, labelled with the path
+  (`rover.pack.cell`). A satisfy without a `by` feature is reported unresolved
+  as "no explicit satisfying feature" (instead of the old "Unexpected
+  relationship result" text), with no inferred target. A root with requirements
+  but no satisfy relationship, or with no requirements, no longer reports a
+  resolution error: SysON answers an empty collection with no result type, which
+  the trace now reads as zero objects.
 
 ## [0.9.1] - 2026-10-25
 
