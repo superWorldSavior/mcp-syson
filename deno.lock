@@ -1,7 +1,7 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@casys/constraint-solver@0.1.0": "0.1.0",
+    "jsr:@casys/constraint-solver@0.1.1": "0.1.1",
     "jsr:@mcpview/contracts@0.2.0": "0.2.0",
     "jsr:@mcpview/server@0.30.0": "0.30.0",
     "jsr:@std/assert@*": "1.0.19",
@@ -19,8 +19,8 @@
     "npm:mathjs@^15.2.0": "15.2.0"
   },
   "jsr": {
-    "@casys/constraint-solver@0.1.0": {
-      "integrity": "c55fee03240f4ca7929ced6759d327a8974e951d2d78550bae870757df8dc1c0",
+    "@casys/constraint-solver@0.1.1": {
+      "integrity": "7ec3edd686b9fa71cd0ef8975dcc75560abe6122927457b03f51c95ea643cdf4",
       "dependencies": [
         "npm:mathjs"
       ]
@@ -236,7 +236,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@casys/constraint-solver@0.1.0",
+      "jsr:@casys/constraint-solver@0.1.1",
       "jsr:@mcpview/contracts@0.2.0",
       "jsr:@mcpview/server@0.30.0",
       "jsr:@std/assert@1",

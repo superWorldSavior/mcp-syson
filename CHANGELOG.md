@@ -4,8 +4,16 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-25
+
 ### Changed
 
+- Package, App manifest and current server identity are `0.9.2`.
+- `@casys/constraint-solver` 0.1.1: validation and evaluation results show
+  expressions with the parentheses their reading depends on
+  (`thrust / (totalMass * 9.81) ≥ 2`, formerly `thrust / totalMass * 9.81 ≥ 2`).
+  Like the other first-party packages, it is exempt from the minimum dependency
+  age.
 - README: the viewers section is a gallery with one capture per viewer (model
   explorer, query results, value change, requirements, requirements trace,
   validation, and two diagram views), each in light and dark.
