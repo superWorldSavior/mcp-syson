@@ -4,6 +4,16 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `syson_query_requirements_trace` resolves what satisfies a requirement:
+  `satisfy massBudget by budget;` was reported as an unresolved link
+  ("Unexpected relationship result: VoidExpressionResult"), since SysON
+  v2026.7.0 derives no `satisfyingFeature` from it. The trace now reads the
+  explicit `by` feature, the value of the relationship's subject parameter, when
+  the derived accessor is empty. A satisfy without a `by` feature stays
+  unresolved, with no inferred target.
+
 ## [0.9.1] - 2026-10-25
 
 ### Added

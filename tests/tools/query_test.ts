@@ -458,6 +458,103 @@ Deno.test("requirements trace retains an unresolved satisfaction relationship wi
   }
 });
 
+/** How SysON records `satisfy R by f;`: f is the subject parameter's value. */
+const SUBJECT_VALUE =
+  "aql:self.subjectParameter.ownedRelationship->filter(sysml::FeatureValue).value->filter(sysml::FeatureReferenceExpression).referent";
+
+Deno.test("requirements trace reads the `by` feature SysON leaves out of satisfyingFeature", async () => {
+  const requirement = {
+    id: "req",
+    label: "massBudget",
+    kind: "sysml::RequirementUsage",
+  };
+  const relationship = {
+    id: "satisfy",
+    label: "SatisfyRequirementUsage",
+    kind: "sysml::SatisfyRequirementUsage",
+  };
+  const part = { id: "part", label: "budget", kind: "sysml::PartUsage" };
+  const objects = (objsValue: unknown[]) =>
+    expressionResponse({ __typename: "ObjectsExpressionResult", objsValue });
+  const requests: Array<Record<string, unknown>> = [];
+  const restore = mockFetch([
+    objects([requirement]),
+    objects([relationship]),
+    objects([requirement]),
+    // SysON v2026.7.0 derives no satisfyingFeature for `satisfy R by f;`.
+    expressionResponse({ __typename: "VoidExpressionResult" }),
+    objects([part]),
+    objects([]),
+  ], requests);
+  try {
+    const result = await getHandler("syson_query_requirements_trace")({
+      editing_context_id: "ec",
+      root_id: "root",
+    }) as {
+      traces: Array<Record<string, unknown>>;
+      coverage: { satisfied: number };
+    };
+    assertEquals(result.traces[0].satisfiedBy, [part]);
+    assertEquals(result.traces[0].satisfactionLinks, [{
+      relationship,
+      targets: [part],
+      status: "resolved",
+    }]);
+    assertEquals(result.traces[0].error, undefined);
+    assertEquals(result.coverage.satisfied, 1);
+    const expressions = requests.map((request) =>
+      (request.variables as { input: { expression: string } }).input.expression
+    );
+    assertEquals(expressions[3], "aql:self.satisfyingFeature");
+    assertEquals(expressions[4], SUBJECT_VALUE);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("requirements trace leaves a satisfy without a `by` feature unresolved", async () => {
+  const requirement = {
+    id: "req",
+    label: "system components",
+    kind: "sysml::RequirementUsage",
+  };
+  const relationship = {
+    id: "satisfy",
+    label: "SatisfyRequirementUsage",
+    kind: "sysml::SatisfyRequirementUsage",
+  };
+  const objects = (objsValue: unknown[]) =>
+    expressionResponse({ __typename: "ObjectsExpressionResult", objsValue });
+  const restore = mockFetch([
+    objects([requirement]),
+    objects([relationship]),
+    objects([requirement]),
+    expressionResponse({ __typename: "VoidExpressionResult" }),
+    // SysON answers an empty collection without a result type.
+    expressionResponse({}),
+    objects([]),
+  ]);
+  try {
+    const result = await getHandler("syson_query_requirements_trace")({
+      editing_context_id: "ec",
+      root_id: "root",
+    }) as {
+      traces: Array<Record<string, unknown>>;
+      coverage: { satisfied: number };
+    };
+    assertEquals(result.traces[0].satisfiedBy, []);
+    assertEquals(result.traces[0].satisfactionLinks, [{
+      relationship,
+      targets: [],
+      status: "unresolved",
+      error: "Satisfaction relationship has no explicit satisfying feature",
+    }]);
+    assertEquals(result.coverage.satisfied, 0);
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("requirements trace keeps mixed resolved and unresolved links out of satisfied coverage", async () => {
   const requirement = {
     id: "req",

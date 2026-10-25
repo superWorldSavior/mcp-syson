@@ -15,7 +15,7 @@ import type {
 } from "../viewer-data.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 import { SEARCH_ELEMENTS } from "../api/queries.ts";
-import { evalAql, getChildren, getSelf } from "./aql.ts";
+import { evalAql, evalAqlObjects, getChildren, getSelf } from "./aql.ts";
 import type { GqlObject, SearchResult } from "../api/types.ts";
 import { normalizeKind } from "../constraints/ast-parser.ts";
 import { readAttributeValue } from "../constraints/resolver.ts";
@@ -582,6 +582,10 @@ export const queryTools: SysonTool[] = [
 
       const requirements = reqResult.objsValue;
 
+      // `satisfy R by f;` records f as the value of the relationship's subject
+      // parameter, and SysON v2026.7.0 derives no satisfyingFeature from it.
+      const subjectValue =
+        "aql:self.subjectParameter.ownedRelationship->filter(sysml::FeatureValue).value->filter(sysml::FeatureReferenceExpression).referent";
       // SysON v2026.7.0: SatisfyRequirementUsage is a relationship usage,
       // not its satisfying part. Its derived accessors are implemented here:
       // https://github.com/eclipse-syson/syson/blob/v2026.7.0/backend/metamodel/syson-sysml-metamodel/src/main/java/org/eclipse/syson/sysml/impl/SatisfyRequirementUsageImpl.java
@@ -644,9 +648,19 @@ export const queryTools: SysonTool[] = [
           ) continue;
           let link: SatisfactionLink;
           try {
+            // The derived accessor first, then the explicit `by` binding it
+            // misses; without either, no target is inferred.
+            const derived = await readObjects(
+              relationship.id,
+              "aql:self.satisfyingFeature",
+              true,
+            );
             const targets =
-              (await readObjects(relationship.id, "aql:self.satisfyingFeature"))
-                .map(identity);
+              (derived.length > 0 ? derived : await evalAqlObjects(
+                ecId,
+                subjectValue,
+                relationship.id,
+              )).map(identity);
             link = targets.length
               ? {
                 relationship: identity(relationship),
