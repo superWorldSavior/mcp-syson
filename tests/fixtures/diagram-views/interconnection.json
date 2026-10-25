@@ -1,6 +1,7 @@
 {
  "diagramId": "750d251e-b998-4755-9a54-5a4838ac463d",
  "diagramLabel": "Drone interconnection",
+ "viewDefinition": "StandardViewDefinitions::InterconnectionView",
  "targetObjectId": "d9db6660-32d9-40a0-aa79-147f765733c7",
  "nodeCount": 15,
  "edgeCount": 4,

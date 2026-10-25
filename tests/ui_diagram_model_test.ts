@@ -5,6 +5,7 @@ import {
   openingFocus,
   semanticDiagramMember,
   toolContent,
+  viewTypeLabel,
 } from "../src/ui/diagram-viewer/src/diagram-model.ts";
 Deno.test("diagram selection resolves only recorded semantic identity", () => {
   const nodes = [{ id: "graphic", targetObjectId: "semantic", label: "Part" }, {
@@ -544,4 +545,16 @@ Deno.test("the diagram's name is the title, its representation type the eyebrow"
     { title: "General View" },
   );
   assertEquals(diagramHeading({ fallback: "Diagram" }), { title: "Diagram" });
+});
+
+Deno.test("the view type reads from the ViewUsage's definition", () => {
+  assertEquals(
+    viewTypeLabel("StandardViewDefinitions::ActionFlowView"),
+    "Action Flow View",
+  );
+  assertEquals(viewTypeLabel("MyViews::ThermalBudget"), "Thermal Budget");
+  assertEquals(viewTypeLabel("Views::'Thermal Budget'"), "Thermal Budget");
+  assertEquals(viewTypeLabel("GeneralView"), "General View");
+  assertEquals(viewTypeLabel(""), undefined);
+  assertEquals(viewTypeLabel(undefined), undefined);
 });

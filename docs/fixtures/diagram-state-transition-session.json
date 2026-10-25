@@ -19,6 +19,7 @@
   "structuredContent": {
     "diagramId": "84b5ead7-0199-4afa-a33a-bb008480138c",
     "diagramLabel": "FlightModes state transition",
+    "viewDefinition": "StandardViewDefinitions::StateTransitionView",
     "targetObjectId": "5938ae31-cd94-4b7b-85d4-78ecb2ab788d",
     "nodeCount": 18,
     "edgeCount": 8,
@@ -583,5 +584,5 @@
     "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
     "renderer": "local"
   },
-  "projectionFingerprint": "sha256:48335b548cdd9149dfbace3860acd6c3b4649544fc1370647795e9697bd4759f"
+  "projectionFingerprint": "sha256:842ac22fe8472ebcf7d84f215d0db7dc964ad35caa6206c54605e2f9d9c82da3"
 }

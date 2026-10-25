@@ -138,19 +138,25 @@ export async function buildRequirementsSession(): Promise<
   return { ...sessionBase, projectionFingerprint };
 }
 
+/** The SysON views recorded in tests/fixtures/diagram-views. */
+export const DIAGRAM_VIEWS = [
+  "action-flow",
+  "state-transition",
+  "interconnection",
+] as const;
+
 /**
- * Build the recorded session for the diagram viewer: the FlightModes state
- * machine snapshot recorded from the local audit project
- * (tests/fixtures/diagram-views/state-transition.json). The viewer draws its
- * structured nodes and edges; the server SVG is an empty placeholder.
+ * Build the recorded session for the diagram viewer from one view snapshot
+ * recorded on a local SysON project (tests/fixtures/diagram-views). The
+ * viewer draws its structured nodes and edges; the server SVG is an empty
+ * placeholder.
  */
-export async function buildDiagramSession(): Promise<Record<string, unknown>> {
+export async function buildDiagramSession(
+  view: typeof DIAGRAM_VIEWS[number],
+): Promise<Record<string, unknown>> {
   const snapshot = JSON.parse(
     await Deno.readTextFile(
-      new URL(
-        "../tests/fixtures/diagram-views/state-transition.json",
-        import.meta.url,
-      ),
+      new URL(`../tests/fixtures/diagram-views/${view}.json`, import.meta.url),
     ),
   );
   const artifactDigest = await fixtureDigest(
@@ -187,15 +193,21 @@ export async function buildDiagramSession(): Promise<Record<string, unknown>> {
 if (import.meta.main) {
   const root = new URL("..", import.meta.url).pathname;
   await Deno.mkdir(`${root}docs/fixtures`, { recursive: true });
-  for (
-    const [name, build] of [
-      ["requirements", buildRequirementsSession],
-      ["diagram", buildDiagramSession],
-    ] as const
-  ) {
+  const sessions: [string, () => Promise<Record<string, unknown>>][] = [
+    ["requirements", buildRequirementsSession],
+    ...DIAGRAM_VIEWS.map((view) =>
+      [`diagram-${view}`, () => buildDiagramSession(view)] as [
+        string,
+        () => Promise<Record<string, unknown>>,
+      ]
+    ),
+  ];
+  for (const [name, build] of sessions) {
     const outPath = `${root}docs/fixtures/${name}-session.json`;
-    const session = await build();
-    await Deno.writeTextFile(outPath, JSON.stringify(session, null, 2) + "\n");
+    await Deno.writeTextFile(
+      outPath,
+      JSON.stringify(await build(), null, 2) + "\n",
+    );
     console.log(`[docs:viewer-fixtures] wrote ${outPath}`);
   }
 }

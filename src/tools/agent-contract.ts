@@ -557,6 +557,8 @@ const diagramCreateOutputSchema = {
         id: { type: "string" },
         label: { type: "string" },
         kind: { type: "string" },
+        viewUsageId: { type: "string" },
+        viewDefinition: { type: "string" },
       },
       required: ["id", "label", "kind"],
     },
@@ -624,6 +626,7 @@ const diagramSnapshotOutputSchema = {
     edgeCount: { type: "integer", minimum: 0 },
     hiddenNodeCount: { type: "integer", minimum: 0 },
     hiddenEdgeCount: { type: "integer", minimum: 0 },
+    viewDefinition: { type: "string" },
     nodes: {
       type: "array",
       items: {

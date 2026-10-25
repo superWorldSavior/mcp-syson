@@ -409,6 +409,18 @@ export function plainElementName(label: string | undefined): string {
 }
 
 /**
+ * Readable view type from the view definition a diagram's ViewUsage is
+ * typed by: "StandardViewDefinitions::ActionFlowView" → "Action Flow View".
+ */
+export function viewTypeLabel(
+  definition: string | undefined,
+): string | undefined {
+  // SysML quotes unrestricted names: 'Thermal Budget'.
+  const name = definition?.split("::").at(-1)?.trim().replace(/^'(.*)'$/, "$1");
+  return name ? name.replace(/([a-z0-9])([A-Z])/g, "$1 $2") : undefined;
+}
+
+/**
  * Viewer heading (syson-ux-design.md §1.3): the element the diagram shows
  * as the title, else the view's own name; the representation type ("General
  * View") as the eyebrow above it. The type is the title only when nothing

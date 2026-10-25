@@ -139,6 +139,7 @@ export function ViewMenu(
                     key={option.id}
                     type="button"
                     role="menuitemradio"
+                    data-option={option.id}
                     aria-checked={option.id === choice.value ? "true" : "false"}
                     tabIndex={-1}
                     className="syson-menu-segment"

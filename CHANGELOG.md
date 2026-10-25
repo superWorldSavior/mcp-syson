@@ -4,6 +4,27 @@ All notable changes to `@casys/mcp-syson` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-25
+
+### Added
+
+- `syson_diagram_snapshot` returns `viewDefinition`, the view type the diagram's
+  ViewUsage is typed by (e.g. `StandardViewDefinitions::StateTransitionView`).
+  SysON draws every SysML view through one diagram description, so
+  `metadata.description` always reads "General View".
+- `syson_diagram_create` returns the `viewUsageId` and `viewDefinition` SysON
+  actually created, and its description says how SysON records the view type.
+
+### Changed
+
+- The diagram viewer's eyebrow, current-view line and rendering details name the
+  real view type ("State Transition View") instead of "General View".
+- Package, App manifest and current server identity are `0.9.1`.
+- README: an action-flow capture leads the page, a viewers section shows the
+  state machine, interconnection and requirements captures, each in light and
+  dark. Captures are taken over the DevTools protocol once the harness reports
+  the viewer ready, so diagrams appear in their automatic layout.
+
 ## [0.9.0] - 2026-10-25
 
 ### Added

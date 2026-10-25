@@ -81,6 +81,7 @@ import {
   toolContent,
   unionDiagramRects,
   uniqueSemanticMembers,
+  viewTypeLabel,
   visibleDiagramRect,
   whollyEnclosed,
   zoomDiagram,
@@ -239,6 +240,8 @@ function useAutoLayout(
 interface DiagramSnapshot extends Record<string, unknown> {
   diagramId: string;
   diagramLabel: string;
+  /** The view type: the definition the diagram's ViewUsage is typed by. */
+  viewDefinition?: string;
   nodeCount: number;
   edgeCount: number;
   editingContextId?: string;
@@ -734,6 +737,7 @@ function ViewsPanel(
       <p className="syson-status">
         {m("currentView", {
           view: `${data.diagramLabel} · ${
+            viewTypeLabel(data.viewDefinition) ||
             data.metadata?.description?.label || dt("Diagram")
           }`,
         })}
@@ -829,7 +833,8 @@ function RenderingPanel(
           {
             id: "representation",
             label: m("representation"),
-            value: data.metadata?.description?.label || dt("Diagram"),
+            value: viewTypeLabel(data.viewDefinition) ||
+              data.metadata?.description?.label || dt("Diagram"),
           },
           { id: "nodes", label: t("nodes"), value: String(data.nodeCount) },
           { id: "edges", label: t("edges"), value: String(data.edgeCount) },
@@ -866,7 +871,8 @@ function Summary(
       ident={
         <ElementIdent
           label={data.diagramLabel || t("diagramFallback")}
-          detail={data.metadata?.description?.label}
+          detail={viewTypeLabel(data.viewDefinition) ||
+            data.metadata?.description?.label}
         />
       }
       reading={[
@@ -1116,7 +1122,10 @@ function Visual(
     data.editingContextId,
   );
   const target = useTargetLabel(context, data);
-  const representation = data.metadata?.description?.label;
+  // SysON describes every SysML view as "General View"; the ViewUsage's
+  // definition says which view it is.
+  const representation = viewTypeLabel(data.viewDefinition) ||
+    data.metadata?.description?.label;
   const heading = diagramHeading({
     representation,
     name: target.pending && representation ? undefined : data.diagramLabel,

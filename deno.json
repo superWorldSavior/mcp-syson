@@ -1,6 +1,6 @@
 {
   "name": "@casys/mcp-syson",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "nodeModulesDir": "auto",
   "tasks": {
     "serve": "deno run --allow-all server.ts --port=3009",

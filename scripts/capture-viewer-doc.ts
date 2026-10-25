@@ -1,10 +1,10 @@
 /// <reference lib="deno.ns" />
 
 /**
- * Capture the README images (docs/images/mcp-syson-requirements-viewer.png and
- * docs/images/mcp-syson-diagram-viewer.png) from the committed viewer bundles
- * through the documentation harness, so they are reproducible: same fixture,
- * same handshake, same viewport, headless Chrome.
+ * Capture the README images (docs/images/mcp-syson-<view>[-dark].png, light
+ * and dark) from the committed viewer bundles through the documentation
+ * harness, so they are reproducible: same fixture, same handshake, same
+ * viewport, headless Chrome.
  * Two runs agree on layout and text; Chrome's rasterizer still drifts by one
  * luma level on a few anti-aliased pixels, so the bytes are not identical.
  *
@@ -16,21 +16,26 @@
 const scriptDir = new URL(".", import.meta.url).pathname;
 const root = await Deno.realPath(scriptDir.replace(/\/scripts\/$/, ""));
 const harnessPath = "/docs/fixtures/viewer-preview.html";
-/** One image per committed fixture; `view` selects it in the harness. */
-const TARGETS = [
-  {
-    view: "requirements",
-    bundle: "requirements-viewer",
-    image: "mcp-syson-requirements-viewer",
-    window: { width: 900, height: 720 },
-  },
-  {
-    view: "diagram",
-    bundle: "diagram-viewer",
-    image: "mcp-syson-diagram-viewer",
-    window: { width: 900, height: 1240 },
-  },
+/**
+ * One image per committed fixture and theme; `view` selects the fixture in
+ * the harness. Windows leave the viewer a 24 px margin.
+ */
+const VIEWS = [
+  { view: "action-flow", bundle: "diagram-viewer", size: [1180, 760] },
+  { view: "state-transition", bundle: "diagram-viewer", size: [760, 980] },
+  { view: "interconnection", bundle: "diagram-viewer", size: [760, 980] },
+  { view: "requirements", bundle: "requirements-viewer", size: [760, 400] },
 ] as const;
+const TARGETS = VIEWS.flatMap(({ view, bundle, size }) =>
+  (["light", "dark"] as const).map((theme) => ({
+    view,
+    bundle,
+    theme,
+    image: `mcp-syson-${view}${theme === "dark" ? "-dark" : ""}`,
+    window: { width: size[0] + 48, height: size[1] + 48 },
+  }))
+);
+
 /** Chrome and ffmpeg both finish in seconds; a deadline keeps a stuck one from hanging. */
 const TOOL_DEADLINE_MS = 60_000;
 
@@ -90,33 +95,27 @@ try {
     ],
     "CHROME_BIN",
   );
-  const ffmpeg = await findExecutable([
+  // ffmpeg is optional, unless FFMPEG_BIN names one: then it must exist.
+  const ffmpegSearch = findExecutable([
     Deno.env.get("FFMPEG_BIN"),
     "/opt/homebrew/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
     "/usr/bin/ffmpeg",
-  ]).catch(() => undefined);
+  ]);
+  const ffmpeg = Deno.env.get("FFMPEG_BIN") !== undefined
+    ? await ffmpegSearch
+    : await ffmpegSearch.catch(() => undefined);
   for (const target of TARGETS) {
     const outputPath = `${root}/docs/images/${target.image}.png`;
     // The raw frame lands next to the output so the task only needs docs/images writable.
     const rawScreenshot = `${root}/docs/images/.${target.image}.raw.png`;
     try {
-      await run(chrome, [
-        "--headless=new",
-        "--disable-background-networking",
-        "--disable-gpu",
-        "--force-color-profile=srgb",
-        "--force-device-scale-factor=2",
-        "--hide-scrollbars",
-        // Locale-sensitive formatting must not follow the capturing machine.
-        "--lang=en-US",
-        "--run-all-compositor-stages-before-draw",
-        "--timeout=8000",
-        "--virtual-time-budget=8000",
-        `--window-size=${target.window.width},${target.window.height}`,
-        `--screenshot=${rawScreenshot}`,
-        `http://127.0.0.1:${port}${harnessPath}?view=${target.view}`,
-      ]);
+      await captureWhenReady(
+        chrome,
+        `http://127.0.0.1:${port}${harnessPath}?view=${target.view}&theme=${target.theme}&capture`,
+        target.window,
+        rawScreenshot,
+      );
       if (ffmpeg) {
         await run(ffmpeg, [
           "-hide_banner",
@@ -146,6 +145,177 @@ try {
   }
 } finally {
   await server.shutdown();
+}
+
+/**
+ * Load the harness in headless Chrome and capture it once the harness says
+ * the viewer is ready (`data-viewer-ready`): after the recorded session is
+ * applied and, for diagrams, after the automatic layout (run by ELK in a
+ * worker, which a fixed screenshot delay would race). Driven over the
+ * DevTools protocol, so no browser automation package is needed.
+ */
+async function captureWhenReady(
+  chrome: string,
+  url: string,
+  window: { width: number; height: number },
+  outputPath: string,
+): Promise<void> {
+  const profile = await Deno.makeTempDir({ prefix: "syson-capture-" });
+  const browser = new Deno.Command(chrome, {
+    args: [
+      "--headless=new",
+      "--disable-background-networking",
+      "--disable-gpu",
+      "--force-color-profile=srgb",
+      "--hide-scrollbars",
+      // Locale-sensitive formatting must not follow the capturing machine.
+      "--lang=en-US",
+      "--remote-debugging-port=0",
+      `--user-data-dir=${profile}`,
+      `--window-size=${window.width},${window.height}`,
+      "about:blank",
+    ],
+    stdout: "null",
+    stderr: "null",
+  }).spawn();
+  let exited = false;
+  const status = browser.status.finally(() => exited = true);
+  const deadline = Date.now() + TOOL_DEADLINE_MS;
+  /** Settle with `promise`, or fail once the capture deadline has passed. */
+  const beforeDeadline = <T>(promise: Promise<T>, what: string) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error(`CAPTURE_TOOL_FAILED ${what} timed out: ${url}`)),
+          Math.max(0, deadline - Date.now()),
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
+  };
+  let socket: WebSocket | undefined;
+  try {
+    let endpoint: string | undefined;
+    while (!endpoint && Date.now() < deadline) {
+      if (exited) {
+        throw new Error("CAPTURE_TOOL_FAILED Chrome exited before DevTools");
+      }
+      const port = await Deno.readTextFile(`${profile}/DevToolsActivePort`)
+        .then((text) => text.split("\n")[0].trim()).catch(() => "");
+      if (port) {
+        const pages = await fetch(`http://127.0.0.1:${port}/json/list`)
+          .then((response) => response.json()).catch(() => []);
+        endpoint = pages.find((page: { type?: string }) => page.type === "page")
+          ?.webSocketDebuggerUrl;
+      }
+      if (!endpoint) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!endpoint) {
+      throw new Error("CAPTURE_TOOL_FAILED Chrome DevTools unavailable");
+    }
+    const devtools = new WebSocket(endpoint);
+    socket = devtools;
+    let next = 0;
+    const pending = new Map<
+      number,
+      {
+        resolve: (result: Record<string, unknown>) => void;
+        reject: (error: Error) => void;
+      }
+    >();
+    // A closed or failed socket settles every call still waiting on it.
+    const fail = () => {
+      for (const call of pending.values()) {
+        call.reject(new Error(`CAPTURE_TOOL_FAILED DevTools closed: ${url}`));
+      }
+      pending.clear();
+    };
+    devtools.onclose = fail;
+    devtools.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      pending.get(message.id)?.resolve(message.result ?? {});
+      pending.delete(message.id);
+    };
+    await beforeDeadline(
+      new Promise((resolve, reject) => {
+        devtools.onopen = resolve;
+        devtools.onerror = () => {
+          fail();
+          reject(new Error(`CAPTURE_TOOL_FAILED DevTools socket: ${url}`));
+        };
+      }),
+      "DevTools connection",
+    );
+    const send = (method: string, params: Record<string, unknown> = {}) =>
+      beforeDeadline(
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const id = ++next;
+          pending.set(id, { resolve, reject });
+          devtools.send(JSON.stringify({ id, method, params }));
+        }),
+        method,
+      );
+    await send("Emulation.setDeviceMetricsOverride", {
+      width: window.width,
+      height: window.height,
+      deviceScaleFactor: 2,
+      mobile: false,
+    });
+    await send("Page.navigate", { url });
+    // The harness marks the page ready, or says why it is not.
+    let state = "";
+    while (!state && Date.now() < deadline) {
+      const { result } = await send("Runtime.evaluate", {
+        expression:
+          "document.documentElement.dataset.viewerError ? 'error:' + document.documentElement.dataset.viewerError : document.documentElement.dataset.viewerReady === 'true' ? 'ready' : ''",
+        returnByValue: true,
+      }) as { result?: { value?: string } };
+      state = result?.value ?? "";
+      if (!state) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (state !== "ready") {
+      throw new Error(
+        `CAPTURE_TOOL_FAILED viewer ${state || "not ready"}: ${url}`,
+      );
+    }
+    // Let the last frame (fit, labels) settle before the capture.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const { data } = await send("Page.captureScreenshot", {
+      format: "png",
+    }) as { data?: string };
+    if (!data) throw new Error("CAPTURE_TOOL_FAILED empty screenshot");
+    await Deno.writeFile(
+      outputPath,
+      Uint8Array.from(atob(data), (char) => char.charCodeAt(0)),
+    );
+  } finally {
+    socket?.close();
+    // Ask Chrome to quit, then insist; its helpers release the profile last.
+    try {
+      browser.kill("SIGTERM");
+    } catch { /* already gone */ }
+    const quit = await Promise.race([
+      status.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+    ]);
+    if (!quit) {
+      try {
+        browser.kill("SIGKILL");
+      } catch { /* already gone */ }
+      await status;
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await Deno.remove(profile, { recursive: true });
+        break;
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+  }
 }
 
 async function findExecutable(

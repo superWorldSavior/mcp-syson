@@ -1,0 +1,480 @@
+{
+  "schemaVersion": "io.casys.mcp-syson.recorded-diagram-session/1.0",
+  "resourceUri": "ui://mcp-syson/diagram-viewer",
+  "resultSchema": "io.casys.mcp-syson.diagram-snapshot-result/1.0",
+  "readOnly": true,
+  "basis": {
+    "projectId": "mcpview-ux-audit",
+    "projectRevision": 1,
+    "subjectId": "d9db6660-32d9-40a0-aa79-147f765733c7",
+    "thread": {
+      "id": "syson-views",
+      "revision": 1
+    },
+    "artifact": {
+      "id": "diagram-750d251e-b998-4755-9a54-5a4838ac463d",
+      "fingerprint": "sha256:1f3ad9644de6921ebbc6ca212ee47ce473291e6aa5e5f2e1725c309e41f1c3ed"
+    }
+  },
+  "structuredContent": {
+    "diagramId": "750d251e-b998-4755-9a54-5a4838ac463d",
+    "diagramLabel": "Drone interconnection",
+    "viewDefinition": "StandardViewDefinitions::InterconnectionView",
+    "targetObjectId": "d9db6660-32d9-40a0-aa79-147f765733c7",
+    "nodeCount": 15,
+    "edgeCount": 4,
+    "hiddenNodeCount": 59,
+    "hiddenEdgeCount": 0,
+    "nodes": [
+      {
+        "id": "2e12b8d5-96b1-3370-b302-4a5c62d72e89",
+        "label": "«view» view2 : StandardViewDefinitions::InterconnectionView",
+        "targetObjectId": "4918fe5a-3869-427d-914a-faa68d721a0c",
+        "type": "customnode:sysmlviewframe",
+        "kind": "node",
+        "outsideLabels": [],
+        "style": {
+          "kind": "SysMLViewFrameNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 10,
+          "borderSize": 1,
+          "borderStyle": "Solid"
+        },
+        "hasLayout": true,
+        "x": 12,
+        "y": 12,
+        "width": 465,
+        "height": 802
+      },
+      {
+        "id": "55846e1c-fedb-3ede-86d2-370515046d16",
+        "label": "«part def»\nDrone",
+        "targetObjectId": "c25e0da8-045c-48d3-a3b5-9bd73e90e21c",
+        "type": "node:rectangle",
+        "parentId": "2e12b8d5-96b1-3370-b302-4a5c62d72e89",
+        "kind": "node",
+        "outsideLabels": [],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "list"
+        },
+        "hasLayout": true,
+        "x": 12,
+        "y": 45,
+        "width": 445,
+        "height": 749
+      },
+      {
+        "id": "91d8bfdf-c5af-34c8-b940-6528e82f3d50",
+        "label": "interconnection",
+        "targetObjectId": "c25e0da8-045c-48d3-a3b5-9bd73e90e21c",
+        "type": "node:rectangle",
+        "parentId": "55846e1c-fedb-3ede-86d2-370515046d16",
+        "kind": "compartment",
+        "outsideLabels": [],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "transparent",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 1,
+        "y": 60,
+        "width": 443,
+        "height": 688
+      },
+      {
+        "id": "fa8cb903-8ce5-3b7c-b32e-8a4070477ee6",
+        "label": "«part»\nbattery : Battery",
+        "targetObjectId": "4e7cd599-82f6-4737-a00a-9b7649aa61e8",
+        "type": "node:rectangle",
+        "parentId": "91d8bfdf-c5af-34c8-b940-6528e82f3d50",
+        "kind": "node",
+        "outsideLabels": [],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 10,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "list"
+        },
+        "hasLayout": true,
+        "x": 12,
+        "y": 36,
+        "width": 194,
+        "height": 60
+      },
+      {
+        "id": "21b247a6-6d7b-3355-8429-fb9e48640c49",
+        "label": "",
+        "targetObjectId": "63a8eead-6eab-49b1-b602-f82b0f130219",
+        "type": "node:rectangle",
+        "parentId": "fa8cb903-8ce5-3b7c-b32e-8a4070477ee6",
+        "kind": "port",
+        "outsideLabels": [
+          "^powerOut : PowerPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": -5,
+        "y": 0,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "3510351c-aa93-3b67-98d0-5e9c704b418e",
+        "label": "«part»\ncontroller : Controller",
+        "targetObjectId": "eb7a480a-6bb2-4576-a4a5-8d7d690aec48",
+        "type": "node:rectangle",
+        "parentId": "91d8bfdf-c5af-34c8-b940-6528e82f3d50",
+        "kind": "node",
+        "outsideLabels": [],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 10,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "list"
+        },
+        "hasLayout": true,
+        "x": 232,
+        "y": 290,
+        "width": 194,
+        "height": 60
+      },
+      {
+        "id": "77635442-2085-3b44-9649-474d1529153f",
+        "label": "",
+        "targetObjectId": "63c1a42f-bf6d-44ca-b789-266ca392cd65",
+        "type": "node:rectangle",
+        "parentId": "3510351c-aa93-3b67-98d0-5e9c704b418e",
+        "kind": "port",
+        "outsideLabels": [
+          "^powerIn : ~PowerPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 0,
+        "y": -5,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "e9479b9f-7026-3c20-aeda-77a4aa19bf2c",
+        "label": "",
+        "targetObjectId": "e3b653c0-4872-4add-808f-19eab47a7e73",
+        "type": "node:rectangle",
+        "parentId": "3510351c-aa93-3b67-98d0-5e9c704b418e",
+        "kind": "port",
+        "outsideLabels": [
+          "^commandOut : CommandPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 0,
+        "y": 55,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "f0d2bb61-9669-3bb8-8711-95f1acbfb1b7",
+        "label": "",
+        "targetObjectId": "fd7dd65f-bca6-4187-b8d8-582771b0f70f",
+        "type": "node:rectangle",
+        "parentId": "3510351c-aa93-3b67-98d0-5e9c704b418e",
+        "kind": "port",
+        "outsideLabels": [
+          "^telemetryIn : ~TelemetryPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 20,
+        "y": 55,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "b9840dd5-ba3f-3c54-9090-bd59f2033767",
+        "label": "",
+        "targetObjectId": "957f8f61-7040-4728-90b5-9dd850b22407",
+        "type": "node:rectangle",
+        "parentId": "3510351c-aa93-3b67-98d0-5e9c704b418e",
+        "kind": "port",
+        "outsideLabels": [
+          "^statusIn : ~StatusPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 189,
+        "y": 55,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "9eb70b7c-a100-3fff-90e5-814d593f6b25",
+        "label": "«part»\nmotor[4]  : Motor",
+        "targetObjectId": "1ac402b7-ce6f-4606-b692-67dddf2e1668",
+        "type": "node:rectangle",
+        "parentId": "91d8bfdf-c5af-34c8-b940-6528e82f3d50",
+        "kind": "node",
+        "outsideLabels": [],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 10,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "list"
+        },
+        "hasLayout": true,
+        "x": 73,
+        "y": 614,
+        "width": 194,
+        "height": 60
+      },
+      {
+        "id": "2d0e5937-f6fe-3e04-8a78-490abbfe33ee",
+        "label": "",
+        "targetObjectId": "fe6f9f1c-f762-4c2f-b8df-0cc332ce98e5",
+        "type": "node:rectangle",
+        "parentId": "9eb70b7c-a100-3fff-90e5-814d593f6b25",
+        "kind": "port",
+        "outsideLabels": [
+          "^powerIn : ~PowerPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 0,
+        "y": -5,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "6f9fa59c-065a-39c3-a310-79545fcbb3b4",
+        "label": "",
+        "targetObjectId": "e4e7c2f0-be58-4b7e-9735-95cf97a11292",
+        "type": "node:rectangle",
+        "parentId": "9eb70b7c-a100-3fff-90e5-814d593f6b25",
+        "kind": "port",
+        "outsideLabels": [
+          "^commandIn : ~CommandPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 20,
+        "y": -5,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "eb169cb7-37be-306c-8a3e-b253dff0f0f3",
+        "label": "",
+        "targetObjectId": "3ed01fd1-6fc0-4069-a604-3ac9f7ac5d3e",
+        "type": "node:rectangle",
+        "parentId": "9eb70b7c-a100-3fff-90e5-814d593f6b25",
+        "kind": "port",
+        "outsideLabels": [
+          "^telemetryOut : TelemetryPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 40,
+        "y": -5,
+        "width": 10,
+        "height": 10
+      },
+      {
+        "id": "1732a732-f2fb-3b33-8ce2-16f32d338e6a",
+        "label": "",
+        "targetObjectId": "b907690a-5d76-4291-9c80-a7af255e8c90",
+        "type": "node:rectangle",
+        "parentId": "9eb70b7c-a100-3fff-90e5-814d593f6b25",
+        "kind": "port",
+        "outsideLabels": [
+          "^statusOut : StatusPort"
+        ],
+        "style": {
+          "kind": "RectangularNodeStyle",
+          "background": "#ffffff",
+          "borderColor": "#000000",
+          "borderRadius": 0,
+          "borderSize": 1,
+          "borderStyle": "Solid",
+          "childrenLayout": "free"
+        },
+        "hasLayout": true,
+        "x": 189,
+        "y": 43,
+        "width": 10,
+        "height": 10
+      }
+    ],
+    "edges": [
+      {
+        "id": "dbece478-4c41-3612-a95c-5dd1154d4150",
+        "targetObjectId": "3fcc4a76-ca25-4c3e-a314-058cf0bde394",
+        "type": "edge:straight",
+        "style": {
+          "lineStyle": "Solid",
+          "sourceArrow": "None",
+          "targetArrow": "InputFillClosedArrow"
+        },
+        "routingPoints": [],
+        "sourceId": "21b247a6-6d7b-3355-8429-fb9e48640c49",
+        "targetId": "2d0e5937-f6fe-3e04-8a78-490abbfe33ee",
+        "label": ""
+      },
+      {
+        "id": "b17a7326-68f9-3f7a-b2fc-c7fb3912fca5",
+        "targetObjectId": "f4d8dfa9-b947-42a8-94ef-c68f28f9d7ef",
+        "type": "edge:straight",
+        "style": {
+          "lineStyle": "Solid",
+          "sourceArrow": "None",
+          "targetArrow": "None"
+        },
+        "routingPoints": [
+          {
+            "x": 109,
+            "y": 181
+          },
+          {
+            "x": 295,
+            "y": 181
+          }
+        ],
+        "sourceId": "21b247a6-6d7b-3355-8429-fb9e48640c49",
+        "targetId": "77635442-2085-3b44-9649-474d1529153f",
+        "label": ""
+      },
+      {
+        "id": "f7ab0580-defb-373d-a3b3-5e3cadebe9a0",
+        "targetObjectId": "4e358f3a-7a31-4288-b934-7b017664b378",
+        "type": "edge:straight",
+        "style": {
+          "lineStyle": "Solid",
+          "sourceArrow": "None",
+          "targetArrow": "None"
+        },
+        "routingPoints": [
+          {
+            "x": 295,
+            "y": 495
+          },
+          {
+            "x": 150,
+            "y": 495
+          }
+        ],
+        "sourceId": "e9479b9f-7026-3c20-aeda-77a4aa19bf2c",
+        "targetId": "6f9fa59c-065a-39c3-a310-79545fcbb3b4",
+        "label": ""
+      },
+      {
+        "id": "0c62a241-d9d6-31d6-b859-6dbf18f4afc3",
+        "targetObjectId": "e720c424-2d1a-47ae-81ee-fe0515724333",
+        "type": "edge:straight",
+        "style": {
+          "lineStyle": "Solid",
+          "sourceArrow": "None",
+          "targetArrow": "None"
+        },
+        "routingPoints": [
+          {
+            "x": 190,
+            "y": 505
+          },
+          {
+            "x": 363,
+            "y": 505
+          }
+        ],
+        "sourceId": "eb169cb7-37be-306c-8a3e-b253dff0f0f3",
+        "targetId": "f0d2bb61-9669-3bb8-8711-95f1acbfb1b7",
+        "label": ""
+      }
+    ],
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+    "renderer": "local"
+  },
+  "projectionFingerprint": "sha256:db8f173171cf7ce71edce8aba3d15451cf4a1c30183206f008054a0347c36e98"
+}
