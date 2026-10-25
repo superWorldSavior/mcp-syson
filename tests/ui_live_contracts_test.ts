@@ -10,10 +10,28 @@ import requirements from "./fixtures/live-audit/syson_requirements_list.json" wi
 import validation from "./fixtures/live-audit/syson_constraint_validate.json" with {
   type: "json",
 };
+import budgetValidation from "./fixtures/live-audit/syson_constraint_validate_drone_budget.json" with {
+  type: "json",
+};
+import children from "./fixtures/live-audit/syson_element_children.json" with {
+  type: "json",
+};
+import element from "./fixtures/live-audit/syson_element_get.json" with {
+  type: "json",
+};
+import queryEval from "./fixtures/live-audit/syson_query_eval.json" with {
+  type: "json",
+};
+import valueSet from "./fixtures/live-audit/syson_value_set.json" with {
+  type: "json",
+};
 import {
+  isModelChildren,
+  isQueryResult,
   isRequirementsTrace,
   isRequirementsViewData,
   isValidationReport,
+  isValueResult,
   isViewerMetadata,
 } from "../src/ui/shared/recorded-content.ts";
 import { validationDiagnostics } from "../src/viewer-data.ts";
@@ -226,5 +244,36 @@ Deno.test("live authored requirements preserve the audit package data without in
       row.authoredConstraints.errors?.length
     ),
     true,
+  );
+});
+
+Deno.test("README capture recordings are admitted by their viewers", () => {
+  assertEquals(isModelChildren(children.structuredContent), true);
+  assertEquals(children.structuredContent.children.length, 39);
+  assertEquals(isQueryResult(queryEval.structuredContent), true);
+  assertEquals(queryEval.structuredContent.count, 10);
+  assertEquals(isValueResult(valueSet.structuredContent), true);
+  assertEquals(valueSet.structuredContent.success, true);
+  assertEquals(isValidationReport(budgetValidation.structuredContent), true);
+  assertEquals(budgetValidation.structuredContent.summary, {
+    total: 4,
+    pass: 3,
+    fail: 1,
+    error: 0,
+    unresolved: 0,
+  });
+});
+
+Deno.test("the recorded element read names the attribute the value change is about", () => {
+  // The value change viewer asks syson_element_get for the attribute's name;
+  // the capture harness answers with this recording only for that element.
+  assertEquals(
+    element.structuredContent.id,
+    valueSet.structuredContent.element_id,
+  );
+  assertEquals(element.structuredContent.label, "width");
+  assertEquals(
+    element.structuredContent.kind,
+    "siriusComponents://semantic?domain=sysml&entity=AttributeUsage",
   );
 });

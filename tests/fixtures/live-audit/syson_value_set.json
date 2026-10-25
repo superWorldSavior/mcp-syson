@@ -1,0 +1,33 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Set attribute dfc0e638-6989-41cb-8cb9-bfd973ae09bc from 26 to 28; verification succeeded."
+    }
+  ],
+  "structuredContent": {
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "scope": {
+      "kind": "element",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+      "rootId": "dfc0e638-6989-41cb-8cb9-bfd973ae09bc"
+    },
+    "element_id": "dfc0e638-6989-41cb-8cb9-bfd973ae09bc",
+    "old_value": 26,
+    "new_value": 28,
+    "verified_value": 28,
+    "literal_id": "fdbd937e-f9fb-4667-a266-10d620883977",
+    "literal_kind": "LiteralInteger",
+    "success": true
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/value-change-viewer"
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.9.1"
+    }
+  },
+  "resultType": "complete"
+}

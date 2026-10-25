@@ -1,0 +1,86 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Evaluated SysON query: 10 object results."
+    }
+  ],
+  "structuredContent": {
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "scope": {
+      "kind": "selection",
+      "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+      "selectedObjectIds": [
+        "61b48d82-20b0-4418-b0c1-1c804ad355fd"
+      ]
+    },
+    "type": "objects",
+    "expression": "aql:self.eAllContents(sysml::PartUsage)",
+    "results": [
+      {
+        "id": "d71b9438-5d5a-497b-97b7-5284e5dce8f3",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "seat"
+      },
+      {
+        "id": "225b735f-72ac-4c65-989d-c8b0f4c41cfd",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "body"
+      },
+      {
+        "id": "50db7e24-a392-461d-9d6f-5726c86396e6",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "wheels"
+      },
+      {
+        "id": "b0dbd5ea-0108-4fbd-9a7e-4c76f645d6b1",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "frontLeftWheel"
+      },
+      {
+        "id": "d6486090-0fc4-4ec7-89c4-b57241491104",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "frontRightWheel"
+      },
+      {
+        "id": "fbfd2bc2-66b3-4200-bacb-67b76dcf0370",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "rearLeftWheel"
+      },
+      {
+        "id": "0f91b6a4-faec-4ade-a667-71e244309aa7",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "rearRightWheel"
+      },
+      {
+        "id": "5bdce649-979b-457c-b7f5-5e1c82304db7",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "battery"
+      },
+      {
+        "id": "3a9b7cd3-e1f7-4071-b7dc-0a00d913df17",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "batmobileEngine"
+      },
+      {
+        "id": "abfe575a-5245-4a5b-bd6b-7e7f62ef0f7e",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=InterfaceUsage",
+        "label": "bat2eng"
+      }
+    ],
+    "count": 10
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/query-results-viewer",
+      "emits": [
+        "syson.element.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.9.1"
+    }
+  },
+  "resultType": "complete"
+}
