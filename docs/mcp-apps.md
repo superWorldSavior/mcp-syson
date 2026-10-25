@@ -144,26 +144,30 @@ details, and root identity plus optional trace/link inspection in that closed
 disclosure. The trace-list and satisfaction-link keys stay independently
 mountable and are not nested as a dashboard.
 
-The authored-requirements and diagram viewers ship committed fixtures and a
-documentation harness for reproducible README captures.
-`docs/fixtures/requirements-session.json` is a fully fingerprinted recorded
-session for the TPS03 StandBackrest capture; the
+Every viewer ships committed fixtures and a documentation harness for
+reproducible README captures. `docs/fixtures/requirements-session.json` is a
+fully fingerprinted recorded session for the TPS03 StandBackrest capture; the
 `docs/fixtures/diagram-<view>-session.json` files wrap the action flow, state
 machine and interconnection snapshots recorded in
-`tests/fixtures/diagram-views`. All are built deterministically by
-`deno task docs:viewer-fixtures` (`scripts/build-viewer-fixtures.ts`).
+`tests/fixtures/diagram-views`. Both are built deterministically by
+`deno task docs:viewer-fixtures` (`scripts/build-viewer-fixtures.ts`). The other
+viewers show tool results recorded in `tests/fixtures/live-audit`.
 `docs/fixtures/viewer-preview.html` is a minimal host harness: `?view=` picks a
-fixture, `?theme=dark` the dark theme, `?capture` hides its legend. It accepts
-context updates, drives the App through the standard MCP UI handshake, and
-chooses a diagram's automatic layout through the viewer's own menu before it
-marks the page ready. `deno task docs:viewer-screenshot`
-(`scripts/capture-viewer-doc.ts`) serves them on a loopback server, drives
-headless Chrome over the DevTools protocol, waits for that ready mark (the
-automatic layout runs in a worker), and writes
-`docs/images/mcp-syson-<view>.png` and `…-dark.png` at 2× scale. Re-running the
-two tasks after any viewer change produces fresh PNGs with the same layout and
-text (Chrome's rasterizer drifts by one luma level on a few anti-aliased pixels,
-so the bytes are not bit-identical).
+fixture, `?theme=dark` the dark theme, `?capture` hides its legend. It drives
+the App through the standard MCP UI handshake and accepts context updates. It
+applies a recorded session, or delivers a recorded tool result as a host does
+and answers the App's own calls (an element's name, say) with recorded results
+for that element only; it is ready once those calls are answered, and an
+unreadable recording or an unknown view fails the capture. It chooses a
+diagram's automatic layout through the viewer's own menu before it marks the
+page ready. `deno task docs:viewer-screenshot` (`scripts/capture-viewer-doc.ts`)
+serves them on a loopback server, drives headless Chrome over the DevTools
+protocol, waits for that ready mark (the automatic layout runs in a worker), and
+writes the viewer with a 24 px margin to `docs/images/mcp-syson-<view>.png` and
+`…-dark.png` at 2× scale; view names as arguments limit the run to those views.
+Re-running the two tasks after any viewer change produces fresh PNGs with the
+same layout and text (Chrome's rasterizer drifts by one luma level on a few
+anti-aliased pixels, so the bytes are not bit-identical).
 
 ## Component catalog
 

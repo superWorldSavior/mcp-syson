@@ -1,0 +1,223 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Listed 39 direct model elements."
+    }
+  ],
+  "structuredContent": {
+    "parentId": "738907af-25b2-4240-83f9-ce0a58a41ac7",
+    "editingContextId": "c6b2a37f-9e88-4d4a-b46f-cc350e142d80",
+    "children": [
+      {
+        "id": "851d5033-0fdc-407d-81af-a173718fb2a3",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=Documentation",
+        "label": "Documentation"
+      },
+      {
+        "id": "b58b65bd-f47c-476e-8397-4ac9a8c6a1f0",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "Vehicle"
+      },
+      {
+        "id": "aa44b08a-c56f-41f0-bb37-2ac2839c5450",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=InterfaceDefinition",
+        "label": "PowerInterface"
+      },
+      {
+        "id": "b966a2dd-cd51-4996-8449-d4e9d5b48588",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PortDefinition",
+        "label": "PowerIP"
+      },
+      {
+        "id": "892966ac-eca5-4c74-a85d-38ea8ca758ec",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ItemDefinition",
+        "label": "Power"
+      },
+      {
+        "id": "eaed2104-a3c8-4164-bb5a-a3510e826f5e",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "Wheel"
+      },
+      {
+        "id": "89f37ec0-c93f-482f-9e8f-3aa25c241d83",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "BatmobileEngine"
+      },
+      {
+        "id": "8762e8b5-587b-4ce1-9860-429e92545d2c",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ItemDefinition",
+        "label": "EngineCommand"
+      },
+      {
+        "id": "61b48d82-20b0-4418-b0c1-1c804ad355fd",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "Batmobile"
+      },
+      {
+        "id": "e5cee37c-bb4c-49cc-922a-2964f4dc301f",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "BatmobileNG"
+      },
+      {
+        "id": "6ef70927-772e-4c19-9fab-a99266132606",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ItemDefinition",
+        "label": "Batman"
+      },
+      {
+        "id": "8a363868-24ce-41a3-b0b4-e1d9392d969b",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ItemDefinition",
+        "label": "Hero"
+      },
+      {
+        "id": "6cfb8cad-68bb-45a1-99b0-c8f9a461aebe",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "bm1"
+      },
+      {
+        "id": "df03fc12-3acf-4700-a7de-7910ed8f238f",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ActionDefinition",
+        "label": "Drive Batmobile"
+      },
+      {
+        "id": "6679cf9e-f986-4051-bccd-5288b966c24c",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=EnumerationDefinition",
+        "label": "StatusKind"
+      },
+      {
+        "id": "78a58bb5-f7a5-4dc2-b845-4eb41de69847",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=UseCaseDefinition",
+        "label": "Activate rocket booster"
+      },
+      {
+        "id": "ebd51219-643e-49e7-b043-a93c0ebb7ddd",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ActionDefinition",
+        "label": "ActivateRocketBooster"
+      },
+      {
+        "id": "50d709da-de18-4eab-b8b7-228a136e6750",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementDefinition",
+        "label": "VehicleMaxSpeed"
+      },
+      {
+        "id": "38699ec1-0d75-4efd-8aa1-c6ab041eae44",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ItemDefinition",
+        "label": "ProductManagement"
+      },
+      {
+        "id": "4a5ac1aa-925d-4eca-847c-50132fb0daa4",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=RequirementUsage",
+        "label": "batmobileSpecification"
+      },
+      {
+        "id": "ea86e913-877c-428d-9917-4505e7ba3c0b",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "batmobileDesignV23"
+      },
+      {
+        "id": "713b37a1-3e61-4179-aa43-d656b440135a",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=SatisfyRequirementUsage",
+        "label": "SatisfyRequirementUsage"
+      },
+      {
+        "id": "bba78a67-524f-4d3f-96a9-de5f9d2d615f",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "System"
+      },
+      {
+        "id": "e3de8166-2c89-49c4-a369-12194b9158f8",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartUsage",
+        "label": "systems"
+      },
+      {
+        "id": "31e23dbb-fcdc-4d42-b04c-bf6b1316776c",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "HeroAssociation"
+      },
+      {
+        "id": "e8780d44-8332-44e7-99f3-7a5865c9da68",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ConcernUsage",
+        "label": "Reduce the number of special parts"
+      },
+      {
+        "id": "8f148a89-31e3-4270-8578-575ce6c51cbc",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ViewpointUsage",
+        "label": "system components"
+      },
+      {
+        "id": "2c564f48-fafb-4ee0-8fe5-2589c806b8f6",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ViewDefinition",
+        "label": "Part list"
+      },
+      {
+        "id": "3a66986f-a37f-4a9e-9464-45925a9676ef",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ViewUsage",
+        "label": "batmobileParts"
+      },
+      {
+        "id": "8bfb3163-32db-40a6-9938-ded6fb3442cb",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "StandardEngine"
+      },
+      {
+        "id": "242d1456-7925-4bbf-b794-afd312bd4053",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "XtremeEngine"
+      },
+      {
+        "id": "28cc9219-f2f7-43b1-bdc0-fdfe783105d7",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "StandardWheel"
+      },
+      {
+        "id": "884b6940-1c52-455f-9637-8703701cc24a",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "XtremeWheel"
+      },
+      {
+        "id": "c156133c-9d09-4a4d-b586-036a6550b7f5",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "EngineChoices"
+      },
+      {
+        "id": "f88fdace-40c7-4258-927b-b142329f7350",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "WheelChoices"
+      },
+      {
+        "id": "e633e1d9-9080-41ac-95ec-6ef1be980b62",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "BatmobileConfigurations"
+      },
+      {
+        "id": "e5d32975-4043-4bf2-9aa4-acb428562df0",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=PartDefinition",
+        "label": "XBatmobile"
+      },
+      {
+        "id": "b38b489f-9052-47f7-a417-0c1e137d0dca",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=ViewUsage",
+        "label": "view1"
+      },
+      {
+        "id": "4a1c4c9e-c2cc-4352-8456-41754505d54c",
+        "kind": "siriusComponents://semantic?domain=sysml&entity=Package",
+        "label": "UX views fixtures"
+      }
+    ],
+    "count": 39
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://mcp-syson/model-explorer-viewer",
+      "emits": [
+        "syson.element.selected"
+      ]
+    },
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "mcp-syson",
+      "version": "0.9.1"
+    }
+  },
+  "resultType": "complete"
+}

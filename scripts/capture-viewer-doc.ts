@@ -8,7 +8,7 @@
  * Two runs agree on layout and text; Chrome's rasterizer still drifts by one
  * luma level on a few anti-aliased pixels, so the bytes are not identical.
  *
- * Usage: deno task docs:viewer-screenshot
+ * Usage: deno task docs:viewer-screenshot [view…]  (no view: all of them)
  *   CHROME_BIN  headless-capable Chrome binary (default: local Chrome / shell)
  *   FFMPEG_BIN  optional ffmpeg; when found the PNG is re-encoded deterministically
  */
@@ -18,15 +18,37 @@ const root = await Deno.realPath(scriptDir.replace(/\/scripts\/$/, ""));
 const harnessPath = "/docs/fixtures/viewer-preview.html";
 /**
  * One image per committed fixture and theme; `view` selects the fixture in
- * the harness. Windows leave the viewer a 24 px margin.
+ * the harness. A diagram fills its size; a list viewer takes the height it
+ * reports, up to its size. The image is the viewer with a 24 px margin.
  */
 const VIEWS = [
   { view: "action-flow", bundle: "diagram-viewer", size: [1180, 760] },
   { view: "state-transition", bundle: "diagram-viewer", size: [760, 980] },
   { view: "interconnection", bundle: "diagram-viewer", size: [760, 980] },
-  { view: "requirements", bundle: "requirements-viewer", size: [760, 400] },
+  { view: "model-explorer", bundle: "model-explorer-viewer", size: [760, 640] },
+  { view: "query-results", bundle: "query-results-viewer", size: [760, 640] },
+  { view: "value-change", bundle: "value-change-viewer", size: [760, 640] },
+  { view: "requirements", bundle: "requirements-viewer", size: [760, 640] },
+  {
+    view: "requirements-trace",
+    bundle: "requirements-trace-viewer",
+    size: [760, 640],
+  },
+  { view: "validation", bundle: "validation-viewer", size: [760, 640] },
 ] as const;
-const TARGETS = VIEWS.flatMap(({ view, bundle, size }) =>
+const unknown = Deno.args.filter((name) =>
+  !VIEWS.some(({ view }) => view === name)
+);
+if (unknown.length > 0) {
+  throw new Error(
+    `CAPTURE_VIEW_UNKNOWN ${unknown.join(", ")} — known: ${
+      VIEWS.map(({ view }) => view).join(", ")
+    }`,
+  );
+}
+const TARGETS = VIEWS.filter(({ view }) =>
+  Deno.args.length === 0 || Deno.args.includes(view)
+).flatMap(({ view, bundle, size }) =>
   (["light", "dark"] as const).map((theme) => ({
     view,
     bundle,
@@ -282,8 +304,27 @@ async function captureWhenReady(
     }
     // Let the last frame (fit, labels) settle before the capture.
     await new Promise((resolve) => setTimeout(resolve, 600));
+    // The viewer and its margin, whatever height it took.
+    const { result: frame } = await send("Runtime.evaluate", {
+      expression:
+        "(({ x, y, width, height }) => ({ x, y, width, height }))(document.querySelector('#viewer').getBoundingClientRect())",
+      returnByValue: true,
+    }) as {
+      result?: {
+        value?: { x: number; y: number; width: number; height: number };
+      };
+    };
+    const box = frame?.value;
+    if (!box) throw new Error("CAPTURE_TOOL_FAILED viewer frame not found");
     const { data } = await send("Page.captureScreenshot", {
       format: "png",
+      clip: {
+        x: Math.max(0, box.x - 24),
+        y: Math.max(0, box.y - 24),
+        width: box.width + 48,
+        height: box.height + 48,
+        scale: 1,
+      },
     }) as { data?: string };
     if (!data) throw new Error("CAPTURE_TOOL_FAILED empty screenshot");
     await Deno.writeFile(
