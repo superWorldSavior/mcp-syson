@@ -8,6 +8,15 @@
     :root {
       color-scheme: light;
       font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      --ground: #f4f5f3;
+      --ink: #171917;
+      --quiet: #5d655e;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --ground: #0d0f0e;
+      --ink: #e8ebe8;
+      --quiet: #9aa39b;
     }
     * {
       box-sizing: border-box;
@@ -17,8 +26,8 @@
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background: #f4f5f3;
-      color: #171917;
+      background: var(--ground);
+      color: var(--ink);
     }
     main {
       width: min(var(--viewer-width, 760px), calc(100vw - 48px));
@@ -28,7 +37,7 @@
       align-items: center;
       gap: 9px;
       margin: 0 0 12px;
-      color: #5d655e;
+      color: var(--quiet);
       font-size: 13px;
       letter-spacing: .01em;
     }
@@ -42,6 +51,10 @@
       letter-spacing: .06em;
       text-transform: uppercase;
     }
+    /* Captures show the viewer alone. */
+    :root[data-capture] .legend {
+      display: none;
+    }
     /* The viewer frames itself and reports its height; the page only lends it the ground. */
     iframe {
       display: block;
@@ -53,11 +66,19 @@
   </head>
   <body>
     <main>
-      <p class="legend"><strong>Fixture</strong> Contract preview — not execution evidence</p>
+      <p class="legend"><strong>Fixture</strong> Recorded session, rendered by the committed viewer bundle</p>
       <iframe id="viewer"></iframe>
     </main>
     <script type="module">
-    // ?view= picks one committed fixture; anything else is the requirements one.
+    // ?view= picks one committed fixture (anything else is the requirements
+    // one); ?theme=dark, ?capture hides the legend. Diagram views may open in
+    // the automatic layout, chosen through the viewer's own menu.
+    const diagram = (name, title, size) => ({
+      title,
+      bundle: "diagram-viewer",
+      session: `./diagram-${name}-session.json`,
+      ...size,
+    });
     const VIEWS = {
       requirements: {
         title: "SysON requirements viewer",
@@ -66,30 +87,70 @@
         width: 760,
         maxHeight: 640,
       },
-      // A canvas fills what the host gives: a fixed height, set from the start.
-      diagram: {
-        title: "SysON diagram viewer",
-        bundle: "diagram-viewer",
-        session: "./diagram-session.json",
+      "action-flow": diagram("action-flow", "SysON action flow", {
+        width: 1180,
+        height: 760,
+        layout: "auto",
+      }),
+      "state-transition": diagram("state-transition", "SysON state machine", {
         width: 760,
-        maxHeight: 1120,
-        height: 1120,
-      },
+        height: 980,
+        layout: "auto",
+      }),
+      interconnection: diagram("interconnection", "SysON interconnection", {
+        width: 760,
+        height: 980,
+      }),
     };
-    const view = VIEWS[new URLSearchParams(location.search).get("view")] ??
-      VIEWS.requirements;
+    const params = new URLSearchParams(location.search);
+    const view = VIEWS[params.get("view")] ?? VIEWS.requirements;
+    const theme = params.get("theme") === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    if (params.has("capture")) document.documentElement.dataset.capture = "";
     document.title = `${view.title} documentation preview`;
     document.documentElement.style.setProperty("--viewer-width", `${view.width}px`);
     const viewer = document.querySelector("#viewer");
     viewer.title = view.title;
     viewer.src = `../../src/ui/dist/${view.bundle}/index.html`;
+    // A canvas fills what the host gives: a fixed height, set from the start.
     if (view.height) viewer.style.height = `${view.height}px`;
     // Listen before the fixture arrives: the bundle may initialize first.
     const session = fetch(view.session).then((response) => {
       if (!response.ok) throw new Error(`Fixture HTTP ${response.status}`);
       return response.json();
     });
-    const MAX_HEIGHT = view.maxHeight;
+    const MAX_HEIGHT = view.maxHeight ?? view.height;
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    async function waitFor(find, tries = 200) {
+      for (let attempt = 0; attempt < tries; attempt++) {
+        const found = find();
+        if (found) return found;
+        await pause(50);
+      }
+      return undefined;
+    }
+    /**
+     * Choose a layout through the viewer's "⋯" menu, as a person would, and
+     * fold the overview map a capture would show over the drawing.
+     */
+    async function chooseLayout(layout) {
+      const doc = viewer.contentDocument;
+      if (!doc || !await waitFor(() => doc.querySelector(".syson-diagram-svg"))) return;
+      if (document.documentElement.dataset.capture !== undefined) {
+        doc.querySelector('.syson-diagram-control-minimap[aria-pressed="true"]')?.click();
+      }
+      if (!layout || layout === "syson") return;
+      doc.querySelector(".syson-menu-button")?.click();
+      const option = await waitFor(() =>
+        doc.querySelector(`[role="menuitemradio"][data-option="${layout}"]`)
+      );
+      option?.click();
+      await waitFor(() =>
+        doc.querySelector(`.syson-diagram-svg[data-layout="${layout}"]`)
+      );
+      doc.activeElement?.blur();
+      await pause(300);
+    }
     let initialized = false;
     window.addEventListener("message", async (event) => {
       if (event.source !== viewer.contentWindow) return;
@@ -108,7 +169,7 @@
               updateModelContext: { structuredContent: {}, text: {} },
             },
             hostContext: {
-              theme: "light",
+              theme,
               displayMode: "inline",
               containerDimensions: view.height
                 ? { width: view.width, height: view.height }
@@ -139,6 +200,7 @@
           method: "ui/compose/event",
           params: { action: "viewer.session.apply", data: await session },
         }, "*");
+        if (view.bundle === "diagram-viewer") await chooseLayout(view.layout);
         document.documentElement.dataset.viewerReady = "true";
       }
     });

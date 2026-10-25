@@ -9,6 +9,7 @@ import { parseSysonRecordedViewSession } from "../src/ui/shared/recorded-session
 import {
   buildDiagramSession,
   buildRequirementsSession,
+  DIAGRAM_VIEWS,
 } from "../scripts/build-viewer-fixtures.ts";
 
 Deno.test(
@@ -104,22 +105,29 @@ Deno.test(
   },
 );
 
-Deno.test("diagram-session.json is the committed state machine, accepted by the diagram viewer", async () => {
-  const committed = JSON.parse(
-    await Deno.readTextFile(
-      new URL("../docs/fixtures/diagram-session.json", import.meta.url)
-        .pathname,
-    ),
-  );
-  assertEquals(committed, await buildDiagramSession());
-  const parsed = await parseSysonRecordedViewSession(
-    "diagram",
-    committed,
-    isDiagramSnapshot,
-  );
-  assertEquals(parsed !== undefined, true, "fixture should parse successfully");
-  assertEquals(
-    (parsed?.structuredContent as { diagramLabel?: string }).diagramLabel,
-    "FlightModes state transition",
-  );
+Deno.test("diagram view sessions are the committed snapshots, accepted by the diagram viewer", async () => {
+  for (const view of DIAGRAM_VIEWS) {
+    const committed = JSON.parse(
+      await Deno.readTextFile(
+        new URL(
+          `../docs/fixtures/diagram-${view}-session.json`,
+          import.meta.url,
+        )
+          .pathname,
+      ),
+    );
+    assertEquals(committed, await buildDiagramSession(view), view);
+    const parsed = await parseSysonRecordedViewSession(
+      "diagram",
+      committed,
+      isDiagramSnapshot,
+    );
+    assertEquals(parsed !== undefined, true, `${view} should parse`);
+    assertEquals(
+      typeof (parsed?.structuredContent as { viewDefinition?: string })
+        .viewDefinition,
+      "string",
+      view,
+    );
+  }
 });

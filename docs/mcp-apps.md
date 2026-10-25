@@ -147,21 +147,23 @@ mountable and are not nested as a dashboard.
 The authored-requirements and diagram viewers ship committed fixtures and a
 documentation harness for reproducible README captures.
 `docs/fixtures/requirements-session.json` is a fully fingerprinted recorded
-session for the TPS03 StandBackrest capture;
-`docs/fixtures/diagram-session.json` wraps the FlightModes state-machine
-snapshot recorded in `tests/fixtures/diagram-views/state-transition.json`. Both
-are built deterministically by `deno task docs:viewer-fixtures`
-(`scripts/build-viewer-fixtures.ts`). `docs/fixtures/viewer-preview.html` is a
-minimal host harness that loads one fixture (`?view=requirements` or
-`?view=diagram`), accepts context updates, and drives the App through the
-standard MCP UI handshake. `deno task docs:viewer-screenshot`
-(`scripts/capture-viewer-doc.ts`) serves them through a loopback server,
-captures headless-Chrome screenshots at 2× scale, and writes
-`docs/images/mcp-syson-requirements-viewer.png` (900×720) and
-`docs/images/mcp-syson-diagram-viewer.png` (900×1240). Re-running the two tasks
-after any viewer change produces fresh PNGs with the same layout and text
-without manual intervention (Chrome's rasterizer drifts by one luma level on a
-few anti-aliased pixels, so the bytes are not bit-identical).
+session for the TPS03 StandBackrest capture; the
+`docs/fixtures/diagram-<view>-session.json` files wrap the action flow, state
+machine and interconnection snapshots recorded in
+`tests/fixtures/diagram-views`. All are built deterministically by
+`deno task docs:viewer-fixtures` (`scripts/build-viewer-fixtures.ts`).
+`docs/fixtures/viewer-preview.html` is a minimal host harness: `?view=` picks a
+fixture, `?theme=dark` the dark theme, `?capture` hides its legend. It accepts
+context updates, drives the App through the standard MCP UI handshake, and
+chooses a diagram's automatic layout through the viewer's own menu before it
+marks the page ready. `deno task docs:viewer-screenshot`
+(`scripts/capture-viewer-doc.ts`) serves them on a loopback server, drives
+headless Chrome over the DevTools protocol, waits for that ready mark (the
+automatic layout runs in a worker), and writes
+`docs/images/mcp-syson-<view>.png` and `…-dark.png` at 2× scale. Re-running the
+two tasks after any viewer change produces fresh PNGs with the same layout and
+text (Chrome's rasterizer drifts by one luma level on a few anti-aliased pixels,
+so the bytes are not bit-identical).
 
 ## Component catalog
 

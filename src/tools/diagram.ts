@@ -12,6 +12,7 @@
  */
 
 import { renderLocalTopology } from "./diagram-renderer.ts";
+import { evalAql, evalAqlObjects } from "./aql.ts";
 import type { SysonTool } from "./types.ts";
 import { getSysonClient } from "../api/graphql-client.ts";
 
@@ -366,6 +367,26 @@ function fetchDiagramData(
   });
 }
 
+/**
+ * SysON draws every SysML view through one diagram description ("General
+ * View"); the view type the user chose is the definition its ViewUsage is
+ * typed by, e.g. `StandardViewDefinitions::ActionFlowView`.
+ */
+const VIEW_DEFINITION = "aql:self.viewDefinition.qualifiedName";
+const VIEW_USAGES = "aql:self.ownedElement->filter(sysml::ViewUsage)";
+
+/** The view definition a ViewUsage is typed by; undefined for anything else. */
+export async function readViewDefinition(
+  ecId: string,
+  viewUsageId: string | undefined,
+): Promise<string | undefined> {
+  if (!viewUsageId) return undefined;
+  const result = await evalAql(ecId, VIEW_DEFINITION, [viewUsageId]);
+  return result.__typename === "StringExpressionResult"
+    ? result.strValue.trim() || undefined
+    : undefined;
+}
+
 const KROKI_ENV = "SYSON_KROKI_URL";
 
 export type SvgRenderResult = {
@@ -648,6 +669,10 @@ export const diagramTools: SysonTool[] = [
       "Create a new diagram. Call without description_label to list available types " +
       "(General View, Interconnection View, etc.). " +
       "Then call again with description_label to create. " +
+      "SysON records the view type on a SysML ViewUsage it creates in the element: " +
+      "the result's `viewDefinition` (e.g. StandardViewDefinitions::ActionFlowView) is " +
+      "the type actually created, while the representation itself is always described " +
+      "as 'General View'. " +
       "After creating, use syson_diagram_drop to add elements, then syson_diagram_arrange for layout.",
     category: "diagram",
     inputSchema: {
@@ -737,6 +762,14 @@ export const diagramTools: SysonTool[] = [
         );
       }
 
+      // The ViewUsage SysON adds to the element tells which view was created.
+      const viewUsages = () =>
+        evalAqlObjects(ecId, VIEW_USAGES, elementId).then(
+          (items) => new Set(items.map((item) => item.id)),
+          () => undefined,
+        );
+      const before = await viewUsages();
+
       // Create the diagram
       const mutationId = crypto.randomUUID();
       const data = await client.mutate<CreateRepresentationResult>(
@@ -759,10 +792,20 @@ export const diagramTools: SysonTool[] = [
         }
       ).representation;
 
+      const after = await viewUsages();
+      const added = before && after
+        ? [...after].filter((id) => !before.has(id))
+        : [];
+      const viewUsageId = added.length === 1 ? added[0] : undefined;
+      const viewDefinition = await readViewDefinition(ecId, viewUsageId)
+        .catch(() => undefined);
+
       return {
         id: representation.id,
         label: representation.label,
         kind: representation.kind,
+        ...(viewUsageId && { viewUsageId }),
+        ...(viewDefinition && { viewDefinition }),
       };
     },
   },
@@ -910,7 +953,10 @@ export const diagramTools: SysonTool[] = [
       "then identifies that external path. Call after syson_diagram_arrange for best results. " +
       "Structured `nodes` and `edges` hold only what SysON shows: hidden elements are left out " +
       "and counted in `hiddenNodeCount` / `hiddenEdgeCount`. Nodes nested in a free-form " +
-      "compartment have kind `node`; edges carry SysON's `style` (line and arrows).",
+      "compartment have kind `node`; edges carry SysON's `style` (line and arrows). " +
+      "`viewDefinition` is the diagram's view type (e.g. " +
+      "StandardViewDefinitions::StateTransitionView); `metadata.description` always " +
+      "names SysON's single 'General View' diagram description.",
     category: "diagram",
     inputSchema: {
       type: "object",
@@ -952,12 +998,11 @@ export const diagramTools: SysonTool[] = [
         ecId,
         diagId,
       );
-      const rendered = await renderDiagramSvg(
-        nodes,
-        edges,
-        label,
-        childToParent,
-      );
+      const [rendered, viewDefinition] = await Promise.all([
+        renderDiagramSvg(nodes, edges, label, childToParent),
+        // Optional: a snapshot stays valid without its view type.
+        readViewDefinition(ecId, targetObjectId).catch(() => undefined),
+      ]);
 
       const result = {
         diagramId: diagId,
@@ -965,6 +1010,7 @@ export const diagramTools: SysonTool[] = [
         targetObjectId,
         metadata,
         diagramLabel: label,
+        ...(viewDefinition && { viewDefinition }),
         nodeCount: nodes.length,
         edgeCount: edges.length,
         ...((hidden.nodes || hidden.edges) && {

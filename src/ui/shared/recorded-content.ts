@@ -157,8 +157,10 @@ export function isDiagramSnapshot(
       "metadata",
       "hiddenNodeCount",
       "hiddenEdgeCount",
+      "viewDefinition",
     ],
   ) &&
+    optionalString(value, "viewDefinition") &&
     optionalString(value, "editingContextId", true) &&
     ["hiddenNodeCount", "hiddenEdgeCount"].every((key) =>
       value[key] === undefined || isNonNegativeInteger(value[key])

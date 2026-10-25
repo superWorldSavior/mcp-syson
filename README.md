@@ -5,48 +5,59 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A focused [Model Context Protocol](https://modelcontextprotocol.io) provider for
-[SysON](https://mbse-syson.org) and SysML v2. It lets an MCP client work with a
-real SysON model through explicit modelling, navigation, diagram, requirement,
-constraint and value operations.
+[SysON](https://mbse-syson.org) and SysML v2. An MCP client works with a real
+SysON model through explicit modelling, navigation, diagram, requirement,
+constraint and value operations, and shows the results in interactive MCP Apps.
 
-<img src="docs/images/mcp-syson-diagram-viewer.png" width="560" alt="A recorded SysON state machine drawn by the diagram viewer: a state definition with its actions, nested states, initial states and transitions with triggers and guards">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-action-flow-dark.png">
+  <img src="docs/images/mcp-syson-action-flow.png" alt="The Fly action flow drawn by the diagram viewer in the automatic layout: actions, start and done nodes, fork and join bars, a decision, guarded successions and an item flow between parameters">
+</picture>
 
-_The FlightModes state machine recorded from a local SysON project
-(`docs/fixtures/diagram-session.json`) and drawn by the provider-owned diagram
-viewer in SysON's own layout — a contract preview, not execution evidence. The
-image is rendered from the committed fixture through the documentation harness
-(`deno task docs:viewer-screenshot`)._
+## Viewers
 
-## Built for small, useful views
+Every result comes with a compact MCP App that does one job, so a host can
+compose them without embedding a modelling tool.
 
-The server pairs structured MCP results with compact MCP Apps. Each viewer owns
-one bounded job—explore model elements, inspect a diagram, read query values,
-review requirement links, check validation state or confirm a value—so a host
-can compose them without embedding a second modelling application.
+<table>
+  <tr>
+    <td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-state-transition-dark.png">
+  <img src="docs/images/mcp-syson-state-transition.png" alt="The FlightModes state machine: entry actions, nested states, initial states and transitions with triggers and guards">
+</picture>
+    </td>
+    <td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-interconnection-dark.png">
+  <img src="docs/images/mcp-syson-interconnection.png" alt="The Drone interconnection view: a view frame, the Drone part with its parts, ports and connections, and an item flow">
+</picture>
+    </td>
+  </tr>
+</table>
 
-The diagram viewer draws SysON's General, Interconnection, Action Flow and State
-Transition views itself: nested parts, actions and states, view frames, control
-nodes, ports, and SysON's own edge notation (dashed successions, item flows,
-compositions). It keeps SysON's layout or computes an automatic one, and shows
-only what SysON shows: hidden elements stay out.
+- **Diagram**: SysON's General, Interconnection, Action Flow and State
+  Transition views with SysON's notation, in SysON's layout or an automatic one.
+- **Model explorer**: the model as a tree, loaded branch by branch.
+- **Requirements** and **requirements trace**: authored limits, and satisfaction
+  coverage with its gaps.
+- **Validation**: constraint diagnostics by severity.
+- **Query results** and **value change**: query rows, and a value before and
+  after its change.
 
-![A recorded SysON requirements viewer showing the TPS03 StandBackrest authored limits](docs/images/mcp-syson-requirements-viewer.png)
-
-_The TPS03 StandBackrest requirements capture fixture
-(`docs/fixtures/requirements-session.json`), rendered the same way. The viewer
-remains read-only and preserves authored limits without inventing a satisfaction
-verdict._
-
-The model explorer is a tree: branches load on demand and keep their filter and
-scroll position. Model and diagram viewers use the same selection gestures, with
-a basket scoped to each viewer root: click or Space toggles a selection;
-double-click or Enter inspects while preserving it. Diagrams also support an
-additive selection rectangle and separate Select/Pan modes. See
+Click an element to add it to the AI context of the next turn; double-click or
+press Enter to open it. See
 [Browse model elements and diagram views](docs/how-to/browse-model-views.md).
 
-The same operations remain usable in clients without MCP App support. No tool
-calls a language model: interpretation, approval and orchestration stay with the
-calling client.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mcp-syson-requirements-dark.png">
+  <img src="docs/images/mcp-syson-requirements.png" width="600" alt="The StandBackrest authored requirements: maximum displacement at most 1 mm and maximum von Mises stress at most 55,000,000 Pa">
+</picture>
+
+The images are rendered from the recorded fixtures in `docs/fixtures` by
+`deno task docs:viewer-screenshot`. The same operations work in clients without
+MCP Apps, and no tool calls a language model: interpretation, approval and
+orchestration stay with the calling client.
 
 ## Quick start
 

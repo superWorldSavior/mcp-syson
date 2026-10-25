@@ -88,7 +88,7 @@ export function DiagramToolbar({
     disabled?: boolean,
   ) => (
     <Button
-      className="syson-diagram-iconbutton"
+      className={`syson-diagram-iconbutton syson-diagram-control-${kind}`}
       title={label}
       pressed={pressed}
       disabled={disabled}

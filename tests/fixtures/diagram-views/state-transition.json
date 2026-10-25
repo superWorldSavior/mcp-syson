@@ -1,6 +1,7 @@
 {
  "diagramId": "84b5ead7-0199-4afa-a33a-bb008480138c",
  "diagramLabel": "FlightModes state transition",
+ "viewDefinition": "StandardViewDefinitions::StateTransitionView",
  "targetObjectId": "5938ae31-cd94-4b7b-85d4-78ecb2ab788d",
  "nodeCount": 18,
  "edgeCount": 8,

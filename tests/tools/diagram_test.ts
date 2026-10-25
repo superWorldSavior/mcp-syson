@@ -1,8 +1,49 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
+  diagramTools,
+  readViewDefinition,
   renderDiagramSvg,
   snapshotFromDiagram,
 } from "../../src/tools/diagram.ts";
+import {
+  setSysonClient,
+  SysonGraphQLClient,
+} from "../../src/api/graphql-client.ts";
+
+/** Answer SysON GraphQL calls in order, recording each request's operation. */
+function mockSyson(responses: unknown[]) {
+  const original = globalThis.fetch;
+  const operations: string[] = [];
+  let index = 0;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    operations.push(/(query|mutation)\s+(\w+)/.exec(body.query)?.[2] ?? "?");
+    const data = responses[index++] ?? responses.at(-1);
+    return new Response(JSON.stringify({ data }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  setSysonClient(new SysonGraphQLClient({ baseUrl: "http://mock:8080" }));
+  return {
+    operations,
+    restore: () => {
+      globalThis.fetch = original;
+    },
+  };
+}
+
+const evaluated = (result: Record<string, unknown>) => ({
+  evaluateExpression: {
+    __typename: "EvaluateExpressionSuccessPayload",
+    result,
+  },
+});
+const viewUsages = (...ids: string[]) =>
+  evaluated({
+    __typename: "ObjectsExpressionResult",
+    objsValue: ids.map((id) => ({ id, kind: "sysml::ViewUsage", label: id })),
+  });
 
 const NODES = [{
   id: "part-1",
@@ -756,4 +797,86 @@ Deno.test("snapshot leaves out what SysON hides and keeps its notation", () => {
     label: "start",
   }]);
   assertEquals(data.label, "States");
+});
+
+Deno.test("diagram creation reports the view SysON actually created", async () => {
+  const syson = mockSyson([
+    {
+      viewer: {
+        editingContext: {
+          representationDescriptions: {
+            edges: [
+              { node: { id: "d-general", label: "General View" } },
+              { node: { id: "d-flow", label: "Action Flow View" } },
+            ],
+          },
+        },
+      },
+    },
+    viewUsages("view-old"),
+    {
+      createRepresentation: {
+        __typename: "CreateRepresentationSuccessPayload",
+        id: "m",
+        representation: {
+          id: "diagram-1",
+          label: "Fly flow",
+          kind: "siriusComponents://representation?type=Diagram",
+        },
+      },
+    },
+    viewUsages("view-old", "view-new"),
+    evaluated({
+      __typename: "StringExpressionResult",
+      strValue: "StandardViewDefinitions::ActionFlowView",
+    }),
+  ]);
+  try {
+    const create = diagramTools.find((tool) =>
+      tool.name === "syson_diagram_create"
+    )!;
+    const result = await create.handler({
+      editing_context_id: "ec",
+      element_id: "fly",
+      name: "Fly flow",
+      description_label: "Action Flow",
+    });
+    assertEquals(result, {
+      id: "diagram-1",
+      label: "Fly flow",
+      kind: "siriusComponents://representation?type=Diagram",
+      viewUsageId: "view-new",
+      viewDefinition: "StandardViewDefinitions::ActionFlowView",
+    });
+    assertEquals(syson.operations, [
+      "GetRepresentationDescriptions",
+      "EvaluateExpression",
+      "CreateRepresentation",
+      "EvaluateExpression",
+      "EvaluateExpression",
+    ]);
+  } finally {
+    syson.restore();
+  }
+});
+
+Deno.test("only a typed ViewUsage has a view definition", async () => {
+  const syson = mockSyson([
+    evaluated({
+      __typename: "StringExpressionResult",
+      strValue: "StandardViewDefinitions::StateTransitionView",
+    }),
+    evaluated({ __typename: "VoidExpressionResult" }),
+  ]);
+  try {
+    assertEquals(
+      await readViewDefinition("ec", "view"),
+      "StandardViewDefinitions::StateTransitionView",
+    );
+    assertEquals(await readViewDefinition("ec", "package"), undefined);
+    assertEquals(await readViewDefinition("ec", undefined), undefined);
+    assertEquals(syson.operations.length, 2);
+  } finally {
+    syson.restore();
+  }
 });

@@ -1,6 +1,7 @@
 {
  "diagramId": "5de5a6fb-b913-4e95-8c4f-fbee13ab31e1",
  "diagramLabel": "Fly action flow",
+ "viewDefinition": "StandardViewDefinitions::ActionFlowView",
  "targetObjectId": "a4210b20-952b-4420-a36c-084944715b15",
  "nodeCount": 14,
  "edgeCount": 12,
